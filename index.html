@@ -187,6 +187,22 @@
             color: var(--border-color);
         }
 
+        .setup-contrib {
+            margin-top: 14px;
+            font-size: 13px;
+        }
+
+        .setup-contrib a {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 0;
+            text-decoration: none;
+            border: 2px solid var(--border-color);
+            border-radius: 999px;
+            padding: 6px 10px;
+        }
+
         .api-key-info {
             margin-top: 20px;
             padding: 15px;
@@ -1196,6 +1212,12 @@
                 <div class="setup-credit-label" data-i18n="credit.label">Credito Residuo</div>
                 <div id="setupCreditValue" class="setup-credit-value">$-.--</div>
             </div>
+            <div class="setup-contrib">
+                <a href="https://github.com/scarsellifi/cartia" target="_blank" rel="noopener noreferrer">
+                    <span aria-hidden="true">🐙</span>
+                    <span data-i18n="setup.contribute">Contribuisci su GitHub</span>
+                </a>
+            </div>
         </div>
     </div>
 
@@ -1364,7 +1386,8 @@
                     saveStart: 'Salva e Inizia',
                     getKey: 'Ottieni una chiave API su OpenRouter',
                     securityTitle: 'Nota sulla sicurezza:',
-                    securityBody: 'La chiave API viene salvata in localStorage nel tuo browser. Tutte le chiamate API vengono fatte direttamente dal tuo browser a OpenRouter.'
+                    securityBody: 'La chiave API viene salvata in localStorage nel tuo browser. Tutte le chiamate API vengono fatte direttamente dal tuo browser a OpenRouter.',
+                    contribute: 'Contribuisci su GitHub'
                 },
                 demo: {
                     banner: 'Modalita demo: inserisci la chiave per iniziare.',
@@ -1510,7 +1533,8 @@
                     saveStart: 'Save and Start',
                     getKey: 'Get an API key on OpenRouter',
                     securityTitle: 'Security note:',
-                    securityBody: 'The API key is stored in localStorage in your browser. All API calls are made directly from your browser to OpenRouter.'
+                    securityBody: 'The API key is stored in localStorage in your browser. All API calls are made directly from your browser to OpenRouter.',
+                    contribute: 'Contribute on GitHub'
                 },
                 demo: {
                     banner: 'Demo mode: enter your key to get started.',
