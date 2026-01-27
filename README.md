@@ -14,7 +14,7 @@ Unlike traditional chats, CARTIA turns the conversation into a reading experienc
 - 📖 **Paged Interface**: Smooth navigation optimized for e-reader screens.
 - 🎓 **Educational Approach**: Structures prompts into System, Context, and Examples to understand how the AI "thinks".
 - 🌑 **E-ink Optimized**: High contrast design, serif fonts, and no heavy animations.
-- 🔒 **Total Privacy**: Runs entirely in the browser. Your OpenRouter API Key is saved locally in `localStorage` and requests are sent directly from the browser.
+- 🔒 **TOTAL PRIVACY**: Runs entirely in the browser and can be customized for local models/providers. OpenRouter is included for experimental use. In the future it can also support browser-native LLMs.
 - 🛠️ **Open Source**: Built to be studied, modified, and improved by the community.
 
 ### 🚀 Demo
@@ -64,7 +64,7 @@ A differenza delle chat tradizionali, CARTIA trasforma la conversazione in un'es
 - 📖 **Interfaccia a Pagine**: Navigazione fluida ottimizzata per schermi e-reader.
 - 🎓 **Anima Didattica**: Struttura i prompt in System, Context ed Examples per capire come "pensa" l'IA.
 - 🌑 **E-ink Optimized**: Design ad alto contrasto, font serif e zero animazioni pesanti.
-- 🔒 **Privacy Totale**: Funziona interamente nel browser. La tua API Key OpenRouter viene salvata solo localmente in `localStorage` e le chiamate partono direttamente dal browser.
+- 🔒 **PRIVACY TOTALE**: Funziona interamente nel browser e può essere personalizzata per modelli/provider locali. OpenRouter è incluso per uso sperimentale. In futuro potrà anche supportare LLM che girano direttamente nel browser.
 - 🛠️ **Open Source**: Pensata per essere studiata, modificata e migliorata dalla community.
 
 ### 🚀 Demo
@@ -80,7 +80,7 @@ A differenza delle chat tradizionali, CARTIA trasforma la conversazione in un'es
 CARTIA può essere usato in combinazione con **iascarselli.it**:
 - **Intelligenza Artificiale per la Pubblica Amministrazione e i Concorsi Pubblici**
 - Materiali didattici, lezioni e strumenti per comprendere e utilizzare l'IA nel settore pubblico
-- Introduzione all'Intelligenza Artificiale – Vai alla lezione
+- [Lezione base di IA](https://iascarselli.it/lezione_base): perché sono importanti System Prompt, contesto e struttura dell'output
 
 **Marco Scarselli**: esperto di innovazione e sviluppo di soluzioni AI per la Pubblica Amministrazione. Ha lavorato su progetti di ricerca e sviluppo, con riconoscimenti come il "Fiorino d'Oro" (Comune di Firenze) e la "Tuscan Big Data Challenge" (CNR).
 
