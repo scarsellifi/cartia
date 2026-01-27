@@ -1,0 +1,46 @@
+Third-Party Licenses
+====================
+
+This project uses the following third-party libraries:
+
+
+DOMPurify
+---------
+Copyright: Dr.-Ing. Mario Heiderich, Cure53
+License: Apache-2.0 OR MPL-2.0 (dual licensed, user's choice)
+Source: https://github.com/cure53/DOMPurify
+
+DOMPurify is a DOM-only, super-fast, uber-tolerant XSS sanitizer for HTML,
+MathML and SVG.
+
+Licensed under the Apache License, Version 2.0 or the Mozilla Public License
+Version 2.0, at your option. You may obtain a copy of the licenses at:
+- Apache-2.0: https://www.apache.org/licenses/LICENSE-2.0
+- MPL-2.0: https://www.mozilla.org/en-US/MPL/2.0/
+
+
+Marked
+------
+Copyright: MarkedJS (2018+), Christopher Jeffrey (2011-2018)
+License: MIT
+Source: https://github.com/markedjs/marked
+
+Marked is a markdown parser and compiler built for speed.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
