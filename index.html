@@ -1673,9 +1673,9 @@
 
         // ===== MODELS CONFIGURATION =====
         const MODELS = [
+            { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: { input: 0.0000003, output: 0.0000025 } },
             { id: 'openai/gpt-5.2-chat', name: 'OpenAI GPT-5.2 Chat', cost: { input: 0.00000175, output: 0.000014 } },
             { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', cost: { input: 0.0000005, output: 0.000003 } },
-            { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', cost: { input: 0.0000003, output: 0.0000025 } },
             { id: 'perplexity/sonar', name: 'Perplexity Sonar', cost: { input: 0.000001, output: 0.000001 } },
             { id: 'mistralai/mistral-small-3.2-24b-instruct', name: 'Mistral Small 3.2 (24B)', cost: { input: 0.00000006, output: 0.00000018 } },
             { id: 'mistralai/ministral-8b-2512', name: 'Mistral - OpenSource - Self-hostable (8B)', cost: { input: 0.00000015, output: 0.00000015 } },
@@ -2242,11 +2242,14 @@
             }
 
             setupApiKeyScreen() {
+                this.prefillApiKeyFromUrl();
+
                 document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
                     const input = document.getElementById('apiKeyInput');
                     const key = input.value.trim();
                     if (key) {
                         this.apiKeyManager.setApiKey(key);
+                        this.clearApiKeyFromUrl();
                         this.showApp();
                     } else {
                         alert(this.t('errors.invalidKey'));
@@ -2258,6 +2261,25 @@
                         document.getElementById('saveApiKeyBtn').click();
                     }
                 });
+            }
+
+            prefillApiKeyFromUrl() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const apiKey = urlParams.get('key');
+                if (apiKey) {
+                    document.getElementById('apiKeyInput').value = apiKey;
+                }
+            }
+
+            clearApiKeyFromUrl() {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.has('key')) {
+                    urlParams.delete('key');
+                    const newUrl = urlParams.toString()
+                        ? `${window.location.pathname}?${urlParams.toString()}`
+                        : window.location.pathname;
+                    window.history.replaceState({}, '', newUrl);
+                }
 
                 // Refresh credit on setup screen (click on display)
                 document.getElementById('setupCredit').addEventListener('click', () => {
