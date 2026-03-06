@@ -17,6 +17,16 @@ Unlike traditional chats, CARTIA turns the conversation into a reading experienc
 - 🔒 **ALL IN YOUR BROWSER**: Runs entirely in the browser and can be customized for local models/providers. OpenRouter is included for experimental use. In the future it can also support browser-native LLMs.
 - 🛠️ **Open Source**: Built to be studied, modified, and improved by the community.
 
+### 🤖 Multi-Agent Mode
+CARTIA includes a **simplified multi-agent orchestration** system alongside the classic chat — lightweight, transparent, and easy to understand:
+- **Agent Picker with Presets**: Choose from ready-to-use agents (Developer, Analyst, Creative Writer, Buddhist Monk, Facilitator…) or create your own.
+- **LEAD Mode**: When only one agent is active, it responds directly — no orchestrator needed.
+- **Phase-based Execution**: Assign agents to sequential phases (0 = parallel, 1→2→3 = sequential) with context passing between phases via `<PREVIOUS_AGENTS_OUTPUT>`.
+- **Customizable Orchestrator Prompt**: Tailor how the orchestrator synthesizes agent responses.
+- **Auto-disable Agents**: Some agents (e.g., Web Search) automatically deactivate after each turn.
+- **Datetime Injection**: Optionally inject current date/time into system prompts.
+- **E-reader Navigation in Agents**: Message-by-message navigation (↑/↓) and paged reading (📖) work in the Agents tab too.
+
 ### 🚀 Demo
 - **Live Demo**: [https://scarsellifi.github.io/cartia/](https://scarsellifi.github.io/cartia/)
 - Or open [`index.html`](./index.html) locally
@@ -66,6 +76,16 @@ A differenza delle chat tradizionali, CARTIA trasforma la conversazione in un'es
 - 🌑 **E-ink Optimized**: Design ad alto contrasto, font serif e zero animazioni pesanti.
 - 🔒 **ALL IN YOUR BROWSER**: Funziona interamente nel browser e può essere personalizzata per modelli/provider locali. OpenRouter è incluso per uso sperimentale. In futuro potrà anche supportare LLM che girano direttamente nel browser.
 - 🛠️ **Open Source**: Pensata per essere studiata, modificata e migliorata dalla community.
+
+### 🤖 Modalità Multi-Agente
+CARTIA include un sistema di **orchestrazione multi-agente semplificata** accanto alla chat classica — leggero, trasparente e facile da comprendere:
+- **Agent Picker con Preset**: Scegli tra agenti pronti all'uso (Sviluppatore, Analista, Scrittore Creativo, Monaco Buddista, Facilitatore…) o creane di personalizzati.
+- **Modalità LEAD**: Quando c'è un solo agente attivo, risponde direttamente — senza orchestratore.
+- **Esecuzione a Fasi**: Assegna gli agenti a fasi sequenziali (0 = parallelo, 1→2→3 = sequenziale) con passaggio del contesto tra le fasi tramite `<PREVIOUS_AGENTS_OUTPUT>`.
+- **Prompt Orchestratore Personalizzabile**: Personalizza come l'orchestratore sintetizza le risposte degli agenti.
+- **Agenti Auto-disabilitanti**: Alcuni agenti (es. Ricerca Web) si disattivano automaticamente dopo ogni turno.
+- **Iniezione Data/Ora**: Inserimento opzionale di data e ora correnti nei prompt di sistema.
+- **Navigazione E-reader negli Agenti**: Navigazione messaggio per messaggio (↑/↓) e lettura paginata (📖) disponibili anche nel tab Agenti.
 
 ### 🚀 Demo
 - **Live Demo**: [https://scarsellifi.github.io/cartia/](https://scarsellifi.github.io/cartia/)

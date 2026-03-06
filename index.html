@@ -313,6 +313,8 @@
         #homeBtn,
         #newChatBtn,
         #cloneChatBtn,
+        #newAgentsSessionBtn,
+        #clearAgentsBtn,
         #apiKeyBtn {
             flex-shrink: 0;
             width: 44px;
@@ -335,6 +337,8 @@
         #homeBtn:active,
         #newChatBtn:active,
         #cloneChatBtn:active,
+        #newAgentsSessionBtn:active,
+        #clearAgentsBtn:active,
         #apiKeyBtn:active {
             background: var(--button-hover);
         }
@@ -613,6 +617,23 @@
 
         #reasoningToggle:active {
             background: #f0f0f0;
+        }
+
+        #datetimeToggle {
+            width: 44px;
+            height: 44px;
+            border: 2px solid var(--border-color);
+            background: var(--bg-color);
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #datetimeToggle.active {
+            background: var(--message-assistant-bg);
+            border-color: var(--message-assistant-border);
         }
 
         #historyBtn {
@@ -1085,6 +1106,8 @@
             #homeBtn,
             #newChatBtn,
             #cloneChatBtn,
+            #newAgentsSessionBtn,
+            #clearAgentsBtn,
             #apiKeyBtn {
                 width: 36px;
                 height: 36px;
@@ -1220,13 +1243,20 @@
             display: none !important;
         }
 
-        /* Hide chat-only buttons when in agents tab */
         #app.tab-agents #newChatBtn,
         #app.tab-agents #cloneChatBtn {
             display: none !important;
         }
 
-        /* tab-chat hides agents via default display:none on #agentsView */
+        /* Hide agents-only buttons when in chat tab (default) */
+        #newAgentsSessionBtn,
+        #clearAgentsBtn {
+            display: none;
+        }
+        #app.tab-agents #newAgentsSessionBtn,
+        #app.tab-agents #clearAgentsBtn {
+            display: flex;
+        }
 
         /* ===== AGENTS VIEW ===== */
         #agentsView {
@@ -1307,6 +1337,43 @@
             background: var(--button-hover);
         }
 
+        .orchestrator-prompt-section {
+            margin-bottom: 8px;
+        }
+
+        .orchestrator-prompt-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--meta-text);
+            padding: 4px 0;
+        }
+
+        .orchestrator-prompt-toggle:hover {
+            color: var(--border-color);
+        }
+
+        .orchestrator-prompt-textarea {
+            width: 100%;
+            min-height: 70px;
+            padding: 8px 10px;
+            font-size: 13px;
+            font-family: inherit;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            resize: vertical;
+            margin-top: 4px;
+        }
+
+        .orchestrator-prompt-textarea.hidden {
+            display: none;
+        }
+
         .agents-list {
             display: flex;
             gap: 10px;
@@ -1354,9 +1421,6 @@
         }
 
         .agent-remove-btn {
-            position: absolute;
-            top: 4px;
-            right: 4px;
             width: 24px;
             height: 24px;
             border: none;
@@ -1368,6 +1432,7 @@
             align-items: center;
             justify-content: center;
             border-radius: 4px;
+            flex-shrink: 0;
         }
 
         .agent-remove-btn:hover {
@@ -1466,6 +1531,134 @@
         .agents-messages-container .message.orchestrator {
             background: var(--message-assistant-bg);
             border-left-color: var(--message-assistant-border);
+        }
+        .agents-messages-container .message.orchestrator.lead {
+            border-left-color: #2196F3;
+            border-left-width: 4px;
+        }
+        .agents-messages-container .message.orchestrator.lead .message-role {
+            color: #1976D2;
+            font-weight: 600;
+        }
+        .agent-lead-btn {
+            background: none;
+            border: 1.5px solid #90CAF9;
+            color: #90CAF9;
+            border-radius: 4px;
+            padding: 1px 7px;
+            font-size: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            margin-left: 6px;
+            transition: all 0.15s;
+        }
+        .agent-lead-btn:hover {
+            background: #E3F2FD;
+            border-color: #1976D2;
+            color: #1976D2;
+        }
+        .agent-lead-btn.active {
+            background: #1976D2;
+            border-color: #1976D2;
+            color: #fff;
+        }
+        .agent-card.disabled .agent-lead-btn {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /* Agent picker modal */
+        .agent-picker-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .agent-picker {
+            background: var(--bg-color);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            max-width: 420px;
+            width: 92vw;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .agent-picker h3 {
+            margin: 0 0 12px 0;
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .agent-picker-item {
+            padding: 10px 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .agent-picker-item:hover {
+            border-color: var(--border-color);
+        }
+
+        .agent-picker-item:active {
+            background: #f5f5f5;
+        }
+
+        .agent-picker-item .picker-name {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+
+        .agent-picker-item .picker-desc {
+            font-size: 12px;
+            color: var(--meta-text);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .agent-picker-item.custom-pick {
+            border-style: dashed;
+            text-align: center;
+        }
+
+        .agent-picker-item.custom-pick .picker-name {
+            font-size: 15px;
+        }
+
+        .agent-picker-close {
+            display: block;
+            margin: 8px auto 0;
+            padding: 6px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-color);
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+        }
+
+        .agent-preset-badge {
+            font-size: 10px;
+            background: var(--border-color);
+            color: var(--bg-color);
+            padding: 1px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: bold;
         }
 
         .agent-responses-group {
@@ -1678,6 +1871,98 @@
             background: #fee;
         }
 
+        /* Code Preview */
+        .preview-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 8px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: bold;
+            font-family: inherit;
+            border: 2px solid var(--message-assistant-border);
+            border-radius: 6px;
+            background: var(--message-assistant-bg);
+            color: var(--text-color);
+            cursor: pointer;
+        }
+
+        .preview-btn:active {
+            background: #e0ebd0;
+        }
+
+        #previewModal .modal-content {
+            max-width: 95vw;
+            width: 900px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #previewModal .modal-header {
+            flex-shrink: 0;
+        }
+
+        .preview-iframe-wrap {
+            flex: 1;
+            border: 2px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+
+        .preview-iframe-wrap iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .preview-tabs {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+            flex-shrink: 0;
+        }
+
+        .preview-tab-btn {
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: bold;
+            font-family: inherit;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-color);
+            cursor: pointer;
+        }
+
+        .preview-tab-btn.active {
+            background: var(--button-bg);
+            color: var(--button-text);
+            border-color: var(--button-bg);
+        }
+
+        .preview-source {
+            flex: 1;
+            overflow: auto;
+            display: none;
+        }
+
+        .preview-source.active {
+            display: block;
+        }
+
+        .preview-source pre {
+            margin: 0;
+            padding: 12px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            background: #f5f5f5;
+            min-height: 100%;
+        }
+
         /* Agents live progress tracker */
         .agents-progress {
             margin: 15px 0;
@@ -1839,8 +2124,8 @@
         </div>
         <!-- Tab Bar -->
         <div class="tab-bar">
-            <button class="tab-btn active" id="tabChat" data-tab="chat" data-i18n="tabs.chat">Chat</button>
-            <button class="tab-btn" id="tabAgents" data-tab="agents" data-i18n="tabs.agents">Agents</button>
+            <button class="tab-btn active" id="tabAgents" data-tab="agents" data-i18n="tabs.agents">Agents</button>
+            <button class="tab-btn" id="tabChat" data-tab="chat" data-i18n="tabs.chat">Chat</button>
         </div>
 
         <!-- Top Bar -->
@@ -1849,6 +2134,8 @@
                 <button id="homeBtn" title="Torna alla home" data-i18n-title="top.homeTitle">🏠</button>
                 <button id="newChatBtn" title="Nuova Chat (azzera i prompt)" data-i18n-title="top.newChatTitle">💬</button>
                 <button id="cloneChatBtn" title="Nuova Chat (clona prompt)" data-i18n-title="top.cloneChatTitle">CL</button>
+                <button id="newAgentsSessionBtn" title="Nuova sessione agenti" data-i18n-title="agents.newSessionTitle">💬</button>
+                <button id="clearAgentsBtn" title="Pulisci tutto" data-i18n-title="agents.clearTitle">🗑</button>
                 <button id="apiKeyBtn" title="Cambia API Key" data-i18n-title="top.apiKeyTitle">🔑</button>
             </div>
             <textarea id="messageInput" placeholder="Scrivi un messaggio..." data-i18n-placeholder="chat.inputPlaceholder"></textarea>
@@ -1890,6 +2177,7 @@
                 <button class="font-btn" id="fontIncrease">A+</button>
             </div>
             <button id="reasoningToggle" class="hidden" title="Reasoning: OFF">🧠</button>
+            <button id="datetimeToggle" title="Ancoraggio temporale: OFF" data-i18n-title="nav.datetimeTitle">🕐</button>
             <button id="autoScrollToggle" title="Toggle auto-scroll" data-i18n-title="nav.autoScrollTitle">👁️</button>
             <button id="exportBtn" title="Export chat (MD)" data-i18n-title="nav.exportTitle">⬇️</button>
             <button id="pageViewBtn" title="Modal pagine" data-i18n-title="nav.pageViewTitle">📖</button>
@@ -1912,15 +2200,15 @@
                         <button class="add-agent-btn" id="addAgentBtn" data-i18n="agents.addAgent">+ Agente</button>
                     </div>
                 </div>
+                <div class="orchestrator-prompt-section">
+                    <button class="orchestrator-prompt-toggle" id="orchPromptToggle" data-i18n="agents.orchPromptToggle">Istruzioni orchestratore ▼</button>
+                    <textarea id="orchestratorPrompt" class="orchestrator-prompt-textarea hidden" data-i18n-placeholder="agents.orchPromptPlaceholder" placeholder="Istruzioni per l'orchestratore..."></textarea>
+                </div>
                 <div class="agents-list" id="agentsList"></div>
                 <div class="agents-shared-prompts">
                     <div class="agents-shared-field">
                         <label for="agentsContext" data-i18n="prompt.contextLabel">Context</label>
                         <textarea id="agentsContext" placeholder="Informazioni utili, dati, scenario..." data-i18n-placeholder="prompt.contextPlaceholder"></textarea>
-                    </div>
-                    <div class="agents-shared-field">
-                        <label for="agentsExamples" data-i18n="prompt.examplesLabel">Esempi Di Output</label>
-                        <textarea id="agentsExamples" placeholder="Esempi del formato o dello stile atteso..." data-i18n-placeholder="prompt.examplesPlaceholder"></textarea>
                     </div>
                 </div>
             </div>
@@ -1929,8 +2217,13 @@
             </div>
             <div class="agents-bottom-bar">
                 <button class="agents-toggle-config active" id="agentsToggleConfig" data-i18n="agents.toggleConfig">Config</button>
+                <div class="nav-controls">
+                    <button class="nav-btn" id="agentsPrevMsg" title="Messaggio precedente" data-i18n-title="nav.prevTitle">↑</button>
+                    <button class="nav-btn" id="agentsNextMsg" title="Messaggio successivo" data-i18n-title="nav.nextTitle">↓</button>
+                </div>
                 <button class="font-btn" id="agentsFontDecrease">A-</button>
                 <button class="font-btn" id="agentsFontIncrease">A+</button>
+                <button class="nav-btn" id="agentsPageViewBtn" title="Modal pagine" data-i18n-title="nav.pageViewTitle">&#x1F4D6;</button>
                 <button class="nav-btn" id="agentsExportBtn" title="Export" data-i18n-title="nav.exportTitle">&#x2B07;&#xFE0F;</button>
                 <button class="nav-btn" id="agentsNewSessionBtn" title="Nuova sessione" data-i18n-title="agents.newSessionTitle">&#x1F4AC;</button>
                 <button class="nav-btn" id="agentsHistoryBtn" title="Storico sessioni" data-i18n-title="agents.historyTitle">&#x1F558;</button>
@@ -1965,6 +2258,26 @@
                 <button class="close-btn" onclick="app.closeHistory()">&times;</button>
             </div>
             <div id="historyList"></div>
+        </div>
+    </div>
+
+    <!-- Code Preview Modal -->
+    <div id="previewModal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 data-i18n="preview.title">Anteprima Codice</h2>
+                <button class="close-btn" onclick="app.closePreview()">&times;</button>
+            </div>
+            <div class="preview-tabs">
+                <button class="preview-tab-btn active" id="previewTabRender" data-i18n="preview.tabRender">Render</button>
+                <button class="preview-tab-btn" id="previewTabSource" data-i18n="preview.tabSource">Sorgente</button>
+            </div>
+            <div class="preview-iframe-wrap" id="previewRenderPane">
+                <iframe id="previewFrame" sandbox="allow-scripts allow-modals"></iframe>
+            </div>
+            <div class="preview-source" id="previewSourcePane">
+                <pre id="previewSourceCode"></pre>
+            </div>
         </div>
     </div>
 
@@ -2040,6 +2353,60 @@
             return html;
         }
 
+        // ===== CODE EXTRACTION FOR PREVIEW =====
+        function extractCodeBlocks(text) {
+            const blocks = { html: [], css: [], js: [] };
+            const regex = /```(html|css|javascript|js|htm)\s*\n([\s\S]*?)```/gi;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                const lang = match[1].toLowerCase();
+                const code = match[2].trim();
+                if (lang === 'html' || lang === 'htm') blocks.html.push(code);
+                else if (lang === 'css') blocks.css.push(code);
+                else if (lang === 'javascript' || lang === 'js') blocks.js.push(code);
+            }
+            return blocks;
+        }
+
+        function hasPreviewableCode(text) {
+            if (!text) return false;
+            return /```(html|htm|css|javascript|js)\s*\n/i.test(text);
+        }
+
+        function buildPreviewDocument(blocks) {
+            const cssContent = blocks.css.length ? '<sty' + 'le>\n' + blocks.css.join('\n\n') + '\n</sty' + 'le>' : '';
+            const jsContent = blocks.js.length ? '<scr' + 'ipt>\n' + blocks.js.join('\n\n') + '\n</scr' + 'ipt>' : '';
+
+            // If there's a full HTML doc in blocks, use it as base
+            const fullDoc = blocks.html.find(h => /<html[\s>]/i.test(h) || /<!doctype/i.test(h));
+            if (fullDoc) {
+                let doc = fullDoc;
+                // Inject extra CSS/JS if present and not already in the doc
+                if (cssContent && !blocks.css.every(c => doc.includes(c))) {
+                    doc = doc.replace(/<\/head>/i, cssContent + '\n<' + '/head>');
+                }
+                if (jsContent && !blocks.js.every(c => doc.includes(c))) {
+                    doc = doc.replace(/<\/body>/i, jsContent + '\n<' + '/body>');
+                }
+                return doc;
+            }
+
+            // Otherwise assemble from parts
+            const htmlContent = blocks.html.join('\n\n');
+            return '<' + '!DOCTYPE html>\n' +
+                '<ht' + 'ml>\n' +
+                '<he' + 'ad>\n' +
+                '<meta charset="UTF-8">\n' +
+                '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+                cssContent + '\n' +
+                '</he' + 'ad>\n' +
+                '<bo' + 'dy>\n' +
+                htmlContent + '\n' +
+                jsContent + '\n' +
+                '</bo' + 'dy>\n' +
+                '</ht' + 'ml>';
+        }
+
         const I18N = {
             it: {
                 docTitle: 'CARTIA (Online)',
@@ -2096,6 +2463,9 @@
                     prevTitle: 'Messaggio precedente',
                     nextTitle: 'Messaggio successivo',
                     autoScrollTitle: 'Toggle auto-scroll',
+                    datetimeTitle: 'Ancoraggio temporale',
+                    datetimeOn: 'Ancoraggio temporale: ON',
+                    datetimeOff: 'Ancoraggio temporale: OFF',
                     exportTitle: 'Export chat (MD)',
                     pageViewTitle: 'Modal pagine'
                 },
@@ -2203,11 +2573,12 @@
                     toggleConfig: 'Config',
                     newSessionTitle: 'Nuova sessione agenti',
                     emptyAgents: 'Aggiungi almeno un agente per iniziare.',
-                    emptyChat: 'Nessun messaggio. Invia una domanda per attivare gli agenti.',
+                    clearTitle: 'Pulisci tutto',
+                    emptyChat: 'Nessun messaggio. Invia una domanda per attivare gli agenti. Con un solo agente attivo si attiva la modalità LEAD (risposta diretta).',
                     statusCalling: 'Chiamata agenti in parallelo...',
                     statusOrchestrating: 'Orchestratore in elaborazione...',
                     agentResponses: '{count} risposte agenti',
-                    orchestratorRole: 'Sei un orchestratore esperto. Riceverai le risposte di diversi agenti specializzati che hanno analizzato la stessa domanda da punti di vista diversi. Sintetizza le loro risposte in una risposta completa, evidenziando i punti di convergenza e le prospettive complementari. Se ci sono contraddizioni, segnalale. Rispondi nella lingua dell\'utente.',
+                    orchestratorRole: 'Sei un orchestratore esperto. Riceverai le risposte di diversi agenti specializzati che hanno analizzato la stessa domanda da punti di vista diversi. Sintetizza le loro risposte in una risposta completa, evidenziando i punti di convergenza e le prospettive complementari. Se ci sono contraddizioni, segnalale. Alla fine della sintesi, suggerisci quali agenti specializzati attivare nel turno successivo per approfondire aspetti emersi o colmare lacune. Rispondi nella lingua dell\'utente.',
                     removeConfirm: 'Rimuovere questo agente?',
                     noAgentsWarning: 'Configura almeno un agente prima di inviare.',
                     exportTitle: 'Sessione Agenti',
@@ -2224,7 +2595,28 @@
                     historyAgents: '{count} agenti',
                     historyMessages: '{count} scambi',
                     historyRestore: 'Ripristina config',
-                    historyDelete: 'Elimina'
+                    historyDelete: 'Elimina',
+                    orchPromptToggle: 'Istruzioni orchestratore \u25BC',
+                    orchPromptPlaceholder: 'Istruzioni per l\'orchestratore (come sintetizzare, formato, lunghezza...)',
+                    leadHint: '1 agente attivo \u2192 modalità LEAD: la risposta dell\'agente è quella finale, senza passare dall\'orchestratore.',
+                    leadHeader: 'Agente LEAD al lavoro...',
+                    leadLabel: 'LEAD \u2014 Risposta diretta',
+                    leadDone: 'Risposta diretta completata',
+                    phaseLabel: 'Fase:',
+                    phaseHint: '0 = parallelo, 1\u21922\u21923 = sequenziale',
+                    phaseProgress: 'Fase {phase} di {total}',
+                    autoDisableBadge: '1 turno',
+                    pickerTitle: 'Aggiungi Agente',
+                    pickerCustom: 'Agente Custom',
+                    pickerCustomDesc: 'Crea un agente personalizzato con ruolo e modello a scelta.',
+                    pickerClose: 'Annulla',
+                    presetBadge: 'Preset'
+                },
+                preview: {
+                    title: 'Anteprima Codice',
+                    tabRender: 'Render',
+                    tabSource: 'Sorgente',
+                    btn: 'Anteprima'
                 }
             },
             en: {
@@ -2282,6 +2674,9 @@
                     prevTitle: 'Previous message',
                     nextTitle: 'Next message',
                     autoScrollTitle: 'Toggle auto-scroll',
+                    datetimeTitle: 'Datetime anchor',
+                    datetimeOn: 'Datetime anchor: ON',
+                    datetimeOff: 'Datetime anchor: OFF',
                     exportTitle: 'Export chat (MD)',
                     pageViewTitle: 'Page mode'
                 },
@@ -2389,11 +2784,12 @@
                     toggleConfig: 'Config',
                     newSessionTitle: 'New agents session',
                     emptyAgents: 'Add at least one agent to start.',
-                    emptyChat: 'No messages. Send a question to activate the agents.',
+                    clearTitle: 'Clear all',
+                    emptyChat: 'No messages. Send a question to activate the agents. With a single active agent, LEAD mode is enabled (direct response).',
                     statusCalling: 'Calling agents in parallel...',
                     statusOrchestrating: 'Orchestrator processing...',
                     agentResponses: '{count} agent responses',
-                    orchestratorRole: 'You are an expert orchestrator. You will receive responses from various specialized agents who analyzed the same question from different perspectives. Synthesize their responses into a comprehensive answer, highlighting points of convergence and complementary perspectives. If there are contradictions, flag them. Reply in the user\'s language.',
+                    orchestratorRole: 'You are an expert orchestrator. You will receive responses from various specialized agents who analyzed the same question from different perspectives. Synthesize their responses into a comprehensive answer, highlighting points of convergence and complementary perspectives. If there are contradictions, flag them. At the end of your synthesis, suggest which specialized agents to activate in the next turn to deepen emerging aspects or fill gaps. Reply in the user\'s language.',
                     removeConfirm: 'Remove this agent?',
                     noAgentsWarning: 'Configure at least one agent before sending.',
                     exportTitle: 'Agents Session',
@@ -2410,7 +2806,28 @@
                     historyAgents: '{count} agents',
                     historyMessages: '{count} exchanges',
                     historyRestore: 'Restore config',
-                    historyDelete: 'Delete'
+                    historyDelete: 'Delete',
+                    orchPromptToggle: 'Orchestrator instructions \u25BC',
+                    orchPromptPlaceholder: 'Instructions for the orchestrator (how to synthesize, format, length...)',
+                    leadHint: '1 active agent \u2192 LEAD mode: the agent\'s response is the final output, bypassing the orchestrator.',
+                    leadHeader: 'LEAD Agent working...',
+                    leadLabel: 'LEAD \u2014 Direct response',
+                    leadDone: 'Direct response complete',
+                    phaseLabel: 'Phase:',
+                    phaseHint: '0 = parallel, 1\u21922\u21923 = sequential',
+                    phaseProgress: 'Phase {phase} of {total}',
+                    autoDisableBadge: '1 turn',
+                    pickerTitle: 'Add Agent',
+                    pickerCustom: 'Custom Agent',
+                    pickerCustomDesc: 'Create a custom agent with your own role and model.',
+                    pickerClose: 'Cancel',
+                    presetBadge: 'Preset'
+                },
+                preview: {
+                    title: 'Code Preview',
+                    tabRender: 'Render',
+                    tabSource: 'Source',
+                    btn: 'Preview'
                 }
             }
         };
@@ -2434,6 +2851,207 @@
             { id: 'qwen/qwen3.5-35b-a3b', name: 'Qwen 3.5 MoE (35B/3B)', cost: { input: 0.00000025, output: 0.000002 } },
             { id: 'qwen/qwen3.5-27b', name: 'Qwen 3.5 Dense (27B)', cost: { input: 0.000000195, output: 0.000000195 } },
             { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', cost: { input: 0.000001, output: 0.000005 } },
+        ];
+
+        // ===== PRESET AGENTS =====
+        const PRESET_AGENTS = [
+            {
+                key: 'facilitator',
+                nameIt: 'Facilitatore', nameEn: 'Facilitator',
+                modelId: 'google/gemini-2.5-flash',
+                roleIt: `Sei il FACILITATORE di CARTIA, una piattaforma multi-agente per esplorare problemi complessi con l'aiuto di agenti AI specializzati. Il tuo compito è guidare l'utente nell'uso dello strumento.
+
+COME FUNZIONA LA PIATTAFORMA:
+- L'utente può attivare più agenti contemporaneamente, ognuno con un ruolo diverso
+- Gli agenti lavorano in parallelo (fase 0) o in sequenza (fasi 1→2→3)
+- Un orchestratore sintetizza le risposte degli agenti in un'unica risposta
+- Con 1 solo agente attivo si attiva la modalità LEAD: la risposta è diretta, senza orchestratore
+- Il campo "Context" in alto viene letto da tutti gli agenti
+- Le istruzioni dell'orchestratore sono personalizzabili
+
+AGENTI DISPONIBILI:
+- Ricerca Web (Perplexity, fase 1, si auto-disattiva dopo ogni turno) — per dati aggiornati
+- Sviluppatore — code review, debug, architettura
+- Fact Checker — verifica affermazioni e fonti
+- Avvocato del Diavolo — critica costruttiva, trova falle
+- Sintetizzatore — riassume e schematizza
+- Traduttore Tecnico — traduzioni IT↔EN con gergo tecnico
+- Sviluppatore Web — genera pagine HTML/CSS/JS visualizzabili con Anteprima
+- Monaco Buddista — prospettiva mindful, rallenta e fa riflettere
+
+IL TUO COMPITO:
+1. Aiuta l'utente a formulare chiaramente il suo problema o obiettivo
+2. Suggerisci quali 2-3 agenti attivare e in che ordine
+3. Consiglia cosa scrivere nel campo "Context"
+4. Dopo ogni turno, aiuta a interpretare i risultati e suggerisci il passo successivo
+5. Per report finali o output visivi, suggerisci lo Sviluppatore Web in modalità LEAD
+
+REGOLE:
+- Sii pratico e diretto, non accademico
+- Adatta il linguaggio al livello dell'utente
+- Non suggerire mai più di 3 agenti alla volta — meglio iterare`,
+                roleEn: `You are the FACILITATOR of CARTIA, a multi-agent platform for exploring complex problems with the help of specialized AI agents. Your job is to guide the user in using the tool.
+
+HOW THE PLATFORM WORKS:
+- The user can activate multiple agents at once, each with a different role
+- Agents work in parallel (phase 0) or sequentially (phases 1→2→3)
+- An orchestrator synthesizes agent responses into a single answer
+- With only 1 active agent, LEAD mode activates: direct response, no orchestrator
+- The "Context" field at the top is read by all agents
+- Orchestrator instructions are customizable
+
+AVAILABLE AGENTS:
+- Web Search (Perplexity, phase 1, auto-disables after each turn) — for up-to-date data
+- Developer — code review, debugging, architecture
+- Fact Checker — verifies claims and sources
+- Devil's Advocate — constructive criticism, finds flaws
+- Synthesizer — summarizes and creates actionable outlines
+- Technical Translator — IT↔EN translations with technical jargon
+- Web Developer — generates HTML/CSS/JS pages viewable with Preview
+- Buddhist Monk — mindful perspective, slows down and reflects
+
+YOUR TASK:
+1. Help the user clearly formulate their problem or goal
+2. Suggest which 2-3 agents to activate and in what order
+3. Advise what to write in the "Context" field
+4. After each turn, help interpret results and suggest the next step
+5. For final reports or visual output, suggest Web Developer in LEAD mode
+
+RULES:
+- Be practical and direct, not academic
+- Adapt language to the user's level
+- Never suggest more than 3 agents at once — better to iterate`
+            },
+            {
+                key: 'webSearch',
+                nameIt: 'Ricerca Web', nameEn: 'Web Search',
+                modelId: 'perplexity/sonar',
+                lockedModel: true,
+                autoDisable: true,
+                phase: 1,
+                roleIt: 'Sei un esperto di ricerca informazioni online. Cerca dati aggiornati, statistiche, best practice, documentazione tecnica e riferimenti pertinenti alla domanda dell\'utente. Fornisci sempre le fonti con URL quando disponibili. Concentrati su risultati accurati e verificabili.',
+                roleEn: 'You are an expert web researcher. Search for up-to-date data, statistics, best practices, technical documentation and references relevant to the user\'s question. Always provide sources with URLs when available. Focus on accurate and verifiable results.'
+            },
+            {
+                key: 'developer',
+                nameIt: 'Sviluppatore', nameEn: 'Developer',
+                modelId: 'google/gemini-2.5-flash',
+                roleIt: 'Sei uno sviluppatore software senior con esperienza in molteplici linguaggi e stack tecnologici. Analizza codice, suggerisci architetture, fai debug, proponi soluzioni tecniche. Scrivi codice pulito, ben commentato e testabile. Se trovi bug o problemi di sicurezza, segnalali subito. Privilegia soluzioni semplici e manutenibili.',
+                roleEn: 'You are a senior software developer with experience in multiple languages and tech stacks. Analyze code, suggest architectures, debug, propose technical solutions. Write clean, well-commented and testable code. If you find bugs or security issues, flag them immediately. Favor simple and maintainable solutions.'
+            },
+            {
+                key: 'factChecker',
+                nameIt: 'Fact Checker', nameEn: 'Fact Checker',
+                modelId: 'google/gemini-2.5-flash',
+                roleIt: 'Sei un fact-checker rigoroso. Il tuo compito è verificare affermazioni, trovare contraddizioni, distinguere fatti da opinioni. Per ogni claim importante, indica il livello di certezza (verificato / plausibile / non verificato / falso). Cita fonti quando possibile. Se altri agenti hanno fatto affermazioni, verificale.',
+                roleEn: 'You are a rigorous fact-checker. Your job is to verify claims, find contradictions, distinguish facts from opinions. For each important claim, indicate the confidence level (verified / plausible / unverified / false). Cite sources when possible. If other agents made claims, verify them.'
+            },
+            {
+                key: 'devilsAdvocate',
+                nameIt: 'Avvocato del Diavolo', nameEn: "Devil's Advocate",
+                modelId: 'google/gemini-2.5-flash',
+                roleIt: 'Sei un avvocato del diavolo costruttivo. Il tuo compito è trovare falle nei ragionamenti, bias nascosti, rischi sottovalutati e assunzioni non dimostrate. Non essere contrario per principio: offri critiche specifiche e actionable. Per ogni problema che trovi, suggerisci anche una possibile soluzione o mitigazione.',
+                roleEn: 'You are a constructive devil\'s advocate. Your job is to find flaws in reasoning, hidden biases, underestimated risks and unproven assumptions. Don\'t be contrary on principle: offer specific and actionable critiques. For each problem you find, also suggest a possible solution or mitigation.'
+            },
+            {
+                key: 'synthesizer',
+                nameIt: 'Sintetizzatore', nameEn: 'Synthesizer',
+                modelId: 'google/gemini-2.5-flash-lite',
+                roleIt: 'Sei un esperto di sintesi e comunicazione. Il tuo compito è prendere informazioni complesse e trasformarle in output chiari, strutturati e actionable. Usa bullet point, tabelle, schemi quando appropriato. Evidenzia le decisioni da prendere e i prossimi passi concreti. Massima chiarezza, minime parole.',
+                roleEn: 'You are an expert in synthesis and communication. Your job is to take complex information and transform it into clear, structured and actionable output. Use bullet points, tables, diagrams when appropriate. Highlight decisions to make and concrete next steps. Maximum clarity, minimum words.'
+            },
+            {
+                key: 'translator',
+                nameIt: 'Traduttore Tecnico', nameEn: 'Technical Translator',
+                modelId: 'google/gemini-2.5-flash-lite',
+                autoDisable: true,
+                roleIt: 'Sei un traduttore tecnico professionista specializzato in traduzioni italiano↔inglese. Mantieni il gergo tecnico appropriato (sviluppo software, IT, scienze, diritto). Non parafrasare: traduci fedelmente preservando tono, struttura e formattazione (markdown, codice, tabelle). Se un termine tecnico è ambiguo, indica le alternative tra parentesi.',
+                roleEn: 'You are a professional technical translator specialized in Italian↔English translations. Maintain appropriate technical jargon (software development, IT, science, law). Don\'t paraphrase: translate faithfully preserving tone, structure and formatting (markdown, code, tables). If a technical term is ambiguous, indicate alternatives in parentheses.'
+            },
+            {
+                key: 'webDev',
+                nameIt: 'Sviluppatore Web', nameEn: 'Web Developer',
+                modelId: 'google/gemini-2.5-flash',
+                roleIt: 'Sei uno sviluppatore web specializzato nella creazione di pagine HTML/CSS/JavaScript singole (single-file). Produci codice pulito, accessibile e responsive. Quando richiesto, genera direttamente il codice completo della pagina in un unico blocco ```html. Segui le linee guida di accessibilità WCAG. Il codice deve funzionare aprendo direttamente il file nel browser, senza dipendenze esterne se non CDN pubblici.',
+                roleEn: 'You are a web developer specialized in creating single-file HTML/CSS/JavaScript pages. Produce clean, accessible and responsive code. When requested, directly generate the complete page code in a single ```html block. Follow WCAG accessibility guidelines. The code must work by opening the file directly in the browser, with no external dependencies except public CDNs.'
+            },
+            {
+                key: 'monk',
+                nameIt: 'Monaco Buddista', nameEn: 'Buddhist Monk',
+                modelId: 'google/gemini-2.5-flash-lite',
+                roleIt: `Sei un monaco buddista saggio e compassionevole, con profonda conoscenza della filosofia orientale, della mindfulness e dei Dieci Mondi (Jikkai) applicati alla vita moderna.
+
+I DIECI MONDI (condizioni vitali):
+Usa questa mappa come strumento diagnostico per leggere la situazione dell'utente e le dinamiche in gioco:
+1. INFERNO (Jigoku) — Sofferenza estrema, senso di impotenza, tutto sembra senza via d'uscita
+2. AVIDITÀ (Gaki) — Desiderio insaziabile, dipendenza, "non è mai abbastanza"
+3. ANIMALITÀ (Chikusho) — Istinto, legge del più forte, mancanza di visione a lungo termine
+4. COLLERA (Shura) — Ego, competizione ossessiva, bisogno di avere ragione
+5. UMANITÀ (Nin) — Calma, ragionevolezza, ma anche passività e conformismo
+6. CIELO (Ten) — Gioia, entusiasmo, ma fugace e dipendente da condizioni esterne
+7. STUDIO (Shomon) — Crescita attraverso l'apprendimento e lo studio degli altri
+8. ILLUMINAZIONE PARZIALE (Engaku) — Intuizione autonoma, comprensione attraverso l'osservazione diretta
+9. BODHISATTVA (Bosatsu) — Compassione attiva, agire per il bene degli altri
+10. BUDDITÀ (Butsu) — Saggezza, coraggio e compassione in armonia; vedere le cose come sono
+
+IL TUO APPROCCIO:
+- Prima di rispondere, rallenta. Osserva la domanda con mente aperta
+- Identifica in quale dei Dieci Mondi si trova la situazione o il ragionamento dell'utente
+- Cerca la radice del problema, non solo i sintomi
+- Offri prospettive che gli altri agenti non vedono: l'aspetto umano, emotivo, etico
+- Usa i Dieci Mondi come bussola, non come giudizio: ogni mondo ha il suo insegnamento
+- Usa metafore e storie brevi quando aiutano a chiarire
+
+QUANDO SEI UTILE:
+- Decisioni difficili dove i dati non bastano
+- Conflitti tra opzioni ugualmente valide
+- Quando l'utente sembra bloccato o sopraffatto (Inferno → come uscirne?)
+- Per aggiungere profondità etica a discussioni tecniche
+- Per ricordare che non tutto ciò che è efficiente è saggio
+- Per leggere le dinamiche di gruppo o progetto attraverso la lente dei Dieci Mondi
+
+REGOLE:
+- Sii conciso: la saggezza non ha bisogno di molte parole
+- Non fare prediche: offri spunti di riflessione
+- Quando citi un Mondo, spiega brevemente perché lo vedi e cosa suggerisce
+- Rispetta il contesto pratico — non stai in un tempio, stai aiutando qualcuno che lavora`,
+                roleEn: `You are a wise and compassionate Buddhist monk, with deep knowledge of Eastern philosophy, mindfulness and the Ten Worlds (Jikkai) applied to modern life.
+
+THE TEN WORLDS (life conditions):
+Use this map as a diagnostic tool to read the user's situation and the dynamics at play:
+1. HELL (Jigoku) — Extreme suffering, helplessness, everything seems hopeless
+2. HUNGER (Gaki) — Insatiable desire, dependency, "never enough"
+3. ANIMALITY (Chikusho) — Instinct, law of the strongest, no long-term vision
+4. ANGER (Shura) — Ego, obsessive competition, need to be right
+5. HUMANITY (Nin) — Calm, reasonableness, but also passivity and conformism
+6. HEAVEN (Ten) — Joy, enthusiasm, but fleeting and dependent on external conditions
+7. LEARNING (Shomon) — Growth through studying and learning from others
+8. REALIZATION (Engaku) — Autonomous insight, understanding through direct observation
+9. BODHISATTVA (Bosatsu) — Active compassion, acting for the benefit of others
+10. BUDDHAHOOD (Butsu) — Wisdom, courage and compassion in harmony; seeing things as they are
+
+YOUR APPROACH:
+- Before answering, slow down. Observe the question with an open mind
+- Identify which of the Ten Worlds the situation or the user's reasoning is in
+- Look for the root of the problem, not just the symptoms
+- Offer perspectives that other agents can't see: the human, emotional, ethical aspect
+- Use the Ten Worlds as a compass, not a judgment: every world has its teaching
+- Use metaphors and short stories when they help clarify
+
+WHEN YOU'RE USEFUL:
+- Difficult decisions where data isn't enough
+- Conflicts between equally valid options
+- When the user seems stuck or overwhelmed (Hell → how to get out?)
+- To add ethical depth to technical discussions
+- To remind that not everything efficient is wise
+- To read group or project dynamics through the lens of the Ten Worlds
+
+RULES:
+- Be concise: wisdom doesn't need many words
+- Don't preach: offer food for thought
+- When you cite a World, briefly explain why you see it and what it suggests
+- Respect the practical context — you're not in a temple, you're helping someone who works`
+            }
         ];
 
         // ===== API KEY MANAGER =====
@@ -2701,6 +3319,17 @@
                 div.appendChild(roleDiv);
                 div.appendChild(contentDiv);
 
+                // Preview button for code blocks
+                if (message.role === 'assistant' && hasPreviewableCode(message.content)) {
+                    const previewBtn = document.createElement('button');
+                    previewBtn.className = 'preview-btn';
+                    previewBtn.textContent = '\u25B6 ' + this.t('preview.btn');
+                    previewBtn.addEventListener('click', () => {
+                        if (window.app) window.app.openPreview(message.content);
+                    });
+                    div.appendChild(previewBtn);
+                }
+
                 if (message.model && message.role === 'assistant' && message.cost > 0) {
                     const metaDiv = document.createElement('div');
                     metaDiv.className = 'message-meta';
@@ -2883,9 +3512,10 @@
                 this.reasoningStorageKey = 'reasoningEnabled_online';
                 this.reasoningEffortKey = 'reasoningEffort_online';
                 this.reasoningToastTimer = null;
-                this.activeTab = 'chat';
+                this.activeTab = 'agents';
                 this.agentsManager = null;
                 this.agentsConfigVisible = true;
+                this.agentsCurrentMessageIndex = -1;
 
                 this.init();
             }
@@ -3023,27 +3653,8 @@
                         document.getElementById('saveApiKeyBtn').click();
                     }
                 });
-            }
 
-            prefillApiKeyFromUrl() {
-                const urlParams = new URLSearchParams(window.location.search);
-                const apiKey = urlParams.get('key');
-                if (apiKey) {
-                    document.getElementById('apiKeyInput').value = apiKey;
-                }
-            }
-
-            clearApiKeyFromUrl() {
-                const urlParams = new URLSearchParams(window.location.search);
-                if (urlParams.has('key')) {
-                    urlParams.delete('key');
-                    const newUrl = urlParams.toString()
-                        ? `${window.location.pathname}?${urlParams.toString()}`
-                        : window.location.pathname;
-                    window.history.replaceState({}, '', newUrl);
-                }
-
-                // Refresh credit on setup screen (click on display)
+                // Setup screen UI listeners (registered once)
                 document.getElementById('setupCredit').addEventListener('click', () => {
                     this.updateCreditDisplay();
                 });
@@ -3073,6 +3684,25 @@
                 });
             }
 
+            prefillApiKeyFromUrl() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const apiKey = urlParams.get('key');
+                if (apiKey) {
+                    document.getElementById('apiKeyInput').value = apiKey;
+                }
+            }
+
+            clearApiKeyFromUrl() {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.has('key')) {
+                    urlParams.delete('key');
+                    const newUrl = urlParams.toString()
+                        ? `${window.location.pathname}?${urlParams.toString()}`
+                        : window.location.pathname;
+                    window.history.replaceState({}, '', newUrl);
+                }
+            }
+
             showSetupScreen() {
                 document.getElementById('app').classList.add('active');
                 this.setDemoMode(true);
@@ -3084,6 +3714,13 @@
                 document.getElementById('app').classList.add('active');
                 this.setDemoMode(false);
                 this.hideSetupOverlay();
+
+                // Guard: only setup once
+                if (this._appInitialized) {
+                    this.updateCreditDisplay();
+                    return;
+                }
+                this._appInitialized = true;
 
                 this.setupEventListeners();
                 this.populateModelSelector();
@@ -3177,6 +3814,8 @@
                 // New chat button
                 document.getElementById('newChatBtn').addEventListener('click', () => this.startNewChat());
                 document.getElementById('cloneChatBtn').addEventListener('click', () => this.cloneChat());
+                document.getElementById('newAgentsSessionBtn').addEventListener('click', () => this.startNewAgentsSession());
+                document.getElementById('clearAgentsBtn').addEventListener('click', () => this.clearAgentsAll());
                 document.getElementById('homeBtn').addEventListener('click', () => {
                     window.location.href = '/';
                 });
@@ -3259,6 +3898,17 @@
 
                 document.getElementById('pageFontDecrease').addEventListener('click', () => {
                     this.decreasePageFontSize();
+                });
+
+                // Datetime anchor toggle
+                this.datetimeAnchor = localStorage.getItem('chat_datetime_anchor') === 'true';
+                const dtBtn = document.getElementById('datetimeToggle');
+                if (this.datetimeAnchor) dtBtn.classList.add('active');
+                dtBtn.addEventListener('click', () => {
+                    this.datetimeAnchor = !this.datetimeAnchor;
+                    localStorage.setItem('chat_datetime_anchor', this.datetimeAnchor);
+                    dtBtn.classList.toggle('active', this.datetimeAnchor);
+                    dtBtn.title = this.datetimeAnchor ? this.t('nav.datetimeOn') : this.t('nav.datetimeOff');
                 });
 
                 // Reasoning toggle
@@ -3365,6 +4015,26 @@
                     contextPrompt: '',
                     examplesPrompt: ''
                 });
+            }
+
+            startNewAgentsSession() {
+                if (this.agentsManager) {
+                    this.agentsManager.saveCurrentSession();
+                    this.agentsManager.currentSession = null;
+                }
+                document.getElementById('agentsMessages').innerHTML = '';
+                document.getElementById('messageInput').value = '';
+            }
+
+            clearAgentsAll() {
+                if (this.agentsManager) {
+                    this.agentsManager.saveCurrentSession();
+                    this.agentsManager.currentSession = null;
+                }
+                document.getElementById('agentsMessages').innerHTML = '';
+                document.getElementById('messageInput').value = '';
+                document.getElementById('agentsContext').value = '';
+                document.getElementById('agentsExamples').value = '';
             }
 
             cloneChat() {
@@ -3576,6 +4246,9 @@
                 const examplesPrompt = document.getElementById('examplesPrompt').value.trim();
 
                 const sections = [];
+                if (this.datetimeAnchor) {
+                    sections.push(`Current date and time: ${new Date().toLocaleString()}`);
+                }
                 if (systemPrompt) {
                     sections.push(`<SYSTEM_PROMPT>\n${systemPrompt}\n</SYSTEM_PROMPT>`);
                 }
@@ -4109,7 +4782,7 @@
             // ===== TAB MANAGEMENT =====
             setupTabs() {
                 const appEl = document.getElementById('app');
-                appEl.classList.add('tab-chat');
+                appEl.classList.add('tab-agents');
 
                 document.getElementById('tabChat').addEventListener('click', () => this.switchTab('chat'));
                 document.getElementById('tabAgents').addEventListener('click', () => this.switchTab('agents'));
@@ -4134,12 +4807,7 @@
             // ===== AGENTS VIEW =====
             setupAgentsView() {
                 document.getElementById('addAgentBtn').addEventListener('click', () => {
-                    this.agentsManager.addAgent({
-                        name: '',
-                        role: '',
-                        modelId: MODELS[0].id
-                    });
-                    this.renderAgentsCards();
+                    this.showAgentPicker();
                 });
 
                 // Populate orchestrator selector
@@ -4155,18 +4823,24 @@
                     this.agentsManager.setOrchestratorModelId(e.target.value);
                 });
 
+                // Orchestrator prompt toggle and persistence
+                const orchPromptEl = document.getElementById('orchestratorPrompt');
+                const orchToggleBtn = document.getElementById('orchPromptToggle');
+                const savedOrchPrompt = localStorage.getItem('agents_orchestrator_prompt_online');
+                orchPromptEl.value = savedOrchPrompt !== null ? savedOrchPrompt : this.t('agents.orchestratorRole');
+                orchPromptEl.addEventListener('input', () => {
+                    localStorage.setItem('agents_orchestrator_prompt_online', orchPromptEl.value);
+                });
+                orchToggleBtn.addEventListener('click', () => {
+                    orchPromptEl.classList.toggle('hidden');
+                });
+
                 // Shared prompts persistence
                 const ctxEl = document.getElementById('agentsContext');
-                const exEl = document.getElementById('agentsExamples');
                 const savedCtx = localStorage.getItem('agents_context_online');
-                const savedEx = localStorage.getItem('agents_examples_online');
                 if (savedCtx) ctxEl.value = savedCtx;
-                if (savedEx) exEl.value = savedEx;
                 ctxEl.addEventListener('input', () => {
                     localStorage.setItem('agents_context_online', ctxEl.value);
-                });
-                exEl.addEventListener('input', () => {
-                    localStorage.setItem('agents_examples_online', exEl.value);
                 });
 
                 // Toggle config
@@ -4210,8 +4884,92 @@
                     this.updateCreditDisplay();
                 });
 
+                // Agents navigation controls
+                document.getElementById('agentsPrevMsg').addEventListener('click', () => {
+                    this.agentsPrevMessage();
+                });
+                document.getElementById('agentsNextMsg').addEventListener('click', () => {
+                    this.agentsNextMessage();
+                });
+                document.getElementById('agentsPageViewBtn').addEventListener('click', () => {
+                    this.showAgentsPageView();
+                });
+
                 this.renderAgentsCards();
                 this.renderAgentsMessages();
+            }
+
+            showAgentPicker() {
+                const overlay = document.createElement('div');
+                overlay.className = 'agent-picker-overlay';
+
+                const picker = document.createElement('div');
+                picker.className = 'agent-picker';
+
+                const title = document.createElement('h3');
+                title.textContent = this.t('agents.pickerTitle');
+                picker.appendChild(title);
+
+                // Custom agent option
+                const customItem = document.createElement('div');
+                customItem.className = 'agent-picker-item custom-pick';
+                customItem.innerHTML = `<div class="picker-name">${this.t('agents.pickerCustom')}</div><div class="picker-desc">${this.t('agents.pickerCustomDesc')}</div>`;
+                customItem.addEventListener('click', () => {
+                    this.agentsManager.addAgent({
+                        name: '',
+                        role: '',
+                        modelId: MODELS[0].id
+                    });
+                    this.renderAgentsCards();
+                    overlay.remove();
+                });
+                picker.appendChild(customItem);
+
+                // Preset agents — hide already-added presets
+                const existingPresets = this.agentsManager.getAgents()
+                    .filter(a => a.preset)
+                    .map(a => a.preset);
+
+                PRESET_AGENTS.forEach(preset => {
+                    if (existingPresets.includes(preset.key)) return;
+
+                    const item = document.createElement('div');
+                    item.className = 'agent-picker-item';
+                    const name = this.lang === 'it' ? preset.nameIt : preset.nameEn;
+                    const desc = this.lang === 'it' ? preset.roleIt : preset.roleEn;
+                    let badges = '';
+                    if (preset.autoDisable) {
+                        badges += ` <span style="font-size:10px;background:#e8a800;color:#fff;padding:1px 6px;border-radius:4px;font-weight:bold;">${this.t('agents.autoDisableBadge')}</span>`;
+                    }
+                    item.innerHTML = `<div class="picker-name">${name}${badges}</div><div class="picker-desc">${desc}</div>`;
+                    item.addEventListener('click', () => {
+                        this.agentsManager.addAgent({
+                            name: name,
+                            role: this.lang === 'it' ? preset.roleIt : preset.roleEn,
+                            modelId: preset.modelId,
+                            preset: preset.key,
+                            lockedModel: preset.lockedModel || false,
+                            autoDisable: preset.autoDisable || false,
+                            phase: preset.phase || 0,
+                            enabled: true
+                        });
+                        this.renderAgentsCards();
+                        overlay.remove();
+                    });
+                    picker.appendChild(item);
+                });
+
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'agent-picker-close';
+                closeBtn.textContent = this.t('agents.pickerClose');
+                closeBtn.addEventListener('click', () => overlay.remove());
+                picker.appendChild(closeBtn);
+
+                overlay.appendChild(picker);
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) overlay.remove();
+                });
+                document.body.appendChild(overlay);
             }
 
             renderAgentsCards() {
@@ -4224,12 +4982,23 @@
                     return;
                 }
 
+                const enabledCount = agents.filter(a => a.enabled !== false).length;
+                const existingHint = document.getElementById('leadHint');
+                if (existingHint) existingHint.remove();
+                if (enabledCount === 1) {
+                    const hint = document.createElement('div');
+                    hint.id = 'leadHint';
+                    hint.style.cssText = 'padding: 8px 12px; margin: 0 0 6px 0; background: #e8f4fd; border-left: 3px solid #0077cc; border-radius: 4px; font-size: 12px; color: #555; line-height: 1.4;';
+                    hint.textContent = this.t('agents.leadHint');
+                    list.parentNode.insertBefore(hint, list);
+                }
+
                 agents.forEach(agent => {
                     const isEnabled = agent.enabled !== false;
+                    const isPreset = !!agent.preset;
                     const card = document.createElement('div');
                     card.className = 'agent-card' + (isEnabled ? '' : ' disabled');
 
-                    // Header with toggle and remove
                     const headerDiv = document.createElement('div');
                     headerDiv.className = 'agent-card-header';
 
@@ -4243,13 +5012,39 @@
                     toggleInput.checked = isEnabled;
                     toggleInput.addEventListener('change', (e) => {
                         this.agentsManager.updateAgent(agent.id, { enabled: e.target.checked });
-                        card.classList.toggle('disabled', !e.target.checked);
+                        this.renderAgentsCards();
                     });
                     const slider = document.createElement('span');
                     slider.className = 'agent-toggle-slider';
                     toggle.appendChild(toggleInput);
                     toggle.appendChild(slider);
                     headerLeft.appendChild(toggle);
+
+                    const leadBtn = document.createElement('button');
+                    leadBtn.className = 'agent-lead-btn' + (enabledCount === 1 && isEnabled ? ' active' : '');
+                    leadBtn.textContent = 'LEAD';
+                    leadBtn.title = this.t('agents.leadHint');
+                    leadBtn.addEventListener('click', () => {
+                        const allAgents = this.agentsManager.getAgents();
+                        allAgents.forEach(a => {
+                            this.agentsManager.updateAgent(a.id, { enabled: a.id === agent.id });
+                        });
+                        this.renderAgentsCards();
+                    });
+                    headerLeft.appendChild(leadBtn);
+
+                    if (isPreset) {
+                        const badge = document.createElement('span');
+                        badge.className = 'agent-preset-badge';
+                        badge.textContent = this.t('agents.presetBadge');
+                        headerLeft.appendChild(badge);
+                    }
+                    if (agent.autoDisable) {
+                        const adBadge = document.createElement('span');
+                        adBadge.style.cssText = 'font-size: 10px; background: #e8a800; color: #fff; padding: 1px 6px; border-radius: 4px; font-weight: bold;';
+                        adBadge.textContent = this.t('agents.autoDisableBadge');
+                        headerLeft.appendChild(adBadge);
+                    }
 
                     const removeBtn = document.createElement('button');
                     removeBtn.className = 'agent-remove-btn';
@@ -4268,32 +5063,72 @@
                     nameInput.type = 'text';
                     nameInput.value = agent.name;
                     nameInput.placeholder = this.t('agents.agentNamePlaceholder');
-                    nameInput.addEventListener('input', (e) => {
-                        this.agentsManager.updateAgent(agent.id, { name: e.target.value });
-                    });
+                    if (isPreset) {
+                        nameInput.readOnly = true;
+                        nameInput.style.opacity = '0.7';
+                    } else {
+                        nameInput.addEventListener('input', (e) => {
+                            this.agentsManager.updateAgent(agent.id, { name: e.target.value });
+                        });
+                    }
 
                     const roleLabel = document.createElement('label');
                     roleLabel.textContent = this.t('agents.agentRole');
                     const roleInput = document.createElement('textarea');
                     roleInput.value = agent.role;
                     roleInput.placeholder = this.t('agents.agentRolePlaceholder');
-                    roleInput.addEventListener('input', (e) => {
-                        this.agentsManager.updateAgent(agent.id, { role: e.target.value });
-                    });
+                    if (isPreset) {
+                        roleInput.readOnly = true;
+                        roleInput.style.opacity = '0.7';
+                    } else {
+                        roleInput.addEventListener('input', (e) => {
+                            this.agentsManager.updateAgent(agent.id, { role: e.target.value });
+                        });
+                    }
 
                     const modelLabel = document.createElement('label');
                     modelLabel.textContent = this.t('agents.agentModel');
                     const modelSelect = document.createElement('select');
-                    MODELS.forEach(m => {
+                    if (agent.lockedModel) {
+                        const m = MODELS.find(m => m.id === agent.modelId) || MODELS[0];
+                        modelSelect.disabled = true;
                         const opt = document.createElement('option');
                         opt.value = m.id;
                         opt.textContent = m.name;
                         modelSelect.appendChild(opt);
+                    } else {
+                        MODELS.forEach(m => {
+                            const opt = document.createElement('option');
+                            opt.value = m.id;
+                            opt.textContent = m.name;
+                            modelSelect.appendChild(opt);
+                        });
+                        modelSelect.value = agent.modelId;
+                        modelSelect.addEventListener('change', (e) => {
+                            this.agentsManager.updateAgent(agent.id, { modelId: e.target.value });
+                        });
+                    }
+
+                    const phaseRow = document.createElement('div');
+                    phaseRow.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-top: 4px;';
+                    const phaseLabel = document.createElement('label');
+                    phaseLabel.textContent = this.t('agents.phaseLabel');
+                    phaseLabel.style.cssText = 'font-size: 12px; margin: 0; white-space: nowrap;';
+                    const phaseInput = document.createElement('input');
+                    phaseInput.type = 'number';
+                    phaseInput.min = '0';
+                    phaseInput.max = '9';
+                    phaseInput.value = agent.phase || 0;
+                    phaseInput.style.cssText = 'width: 50px; padding: 4px 6px; font-size: 12px; border: 1px solid #ddd; border-radius: 4px; text-align: center;';
+                    phaseInput.addEventListener('change', (e) => {
+                        this.agentsManager.updateAgent(agent.id, { phase: parseInt(e.target.value) || 0 });
                     });
-                    modelSelect.value = agent.modelId;
-                    modelSelect.addEventListener('change', (e) => {
-                        this.agentsManager.updateAgent(agent.id, { modelId: e.target.value });
-                    });
+                    const phaseHint = document.createElement('span');
+                    phaseHint.style.cssText = 'font-size: 11px; color: #888;';
+                    phaseHint.textContent = this.t('agents.phaseHint');
+                    phaseRow.appendChild(phaseLabel);
+                    phaseRow.appendChild(phaseInput);
+                    phaseRow.appendChild(phaseHint);
 
                     card.appendChild(headerDiv);
                     card.appendChild(nameLabel);
@@ -4302,6 +5137,7 @@
                     card.appendChild(roleInput);
                     card.appendChild(modelLabel);
                     card.appendChild(modelSelect);
+                    card.appendChild(phaseRow);
                     list.appendChild(card);
                 });
             }
@@ -4358,12 +5194,23 @@
                             content.className = 'agent-response-content';
                             content.innerHTML = renderMarkdown(r.content);
 
+                            item.appendChild(name);
+                            item.appendChild(content);
+
+                            if (hasPreviewableCode(r.content)) {
+                                const previewBtn = document.createElement('button');
+                                previewBtn.className = 'preview-btn';
+                                previewBtn.textContent = '\u25B6 ' + this.t('preview.btn');
+                                previewBtn.addEventListener('click', (e) => {
+                                    e.stopPropagation();
+                                    this.openPreview(r.content);
+                                });
+                                item.appendChild(previewBtn);
+                            }
+
                             const meta = document.createElement('div');
                             meta.className = 'agent-response-meta';
                             meta.textContent = `$${(r.cost || 0).toFixed(6)} | ${r.inputTokens}\u2192${r.outputTokens} tok`;
-
-                            item.appendChild(name);
-                            item.appendChild(content);
                             item.appendChild(meta);
                             body.appendChild(item);
                         });
@@ -4373,18 +5220,29 @@
                         container.appendChild(group);
                     } else if (entry.type === 'orchestrator') {
                         const div = document.createElement('div');
-                        div.className = 'message orchestrator';
+                        div.className = 'message orchestrator' + (entry.isLead ? ' lead' : '');
                         const roleDiv = document.createElement('div');
                         roleDiv.className = 'message-role';
-                        roleDiv.textContent = `${this.t('agents.orchestratorLabel').replace(':', '')} (${entry.modelName})`;
+                        if (entry.isLead) {
+                            roleDiv.textContent = `${entry.agentName || ''} — ${this.t('agents.leadLabel')} (${entry.modelName})`;
+                        } else {
+                            roleDiv.textContent = `${this.t('agents.orchestratorLabel').replace(':', '')} (${entry.modelName})`;
+                        }
                         const contentDiv = document.createElement('div');
                         contentDiv.className = 'message-content';
                         contentDiv.innerHTML = renderMarkdown(entry.content);
+                        div.appendChild(roleDiv);
+                        div.appendChild(contentDiv);
+                        if (hasPreviewableCode(entry.content)) {
+                            const previewBtn = document.createElement('button');
+                            previewBtn.className = 'preview-btn';
+                            previewBtn.textContent = '\u25B6 ' + this.t('preview.btn');
+                            previewBtn.addEventListener('click', () => this.openPreview(entry.content));
+                            div.appendChild(previewBtn);
+                        }
                         const metaDiv = document.createElement('div');
                         metaDiv.className = 'message-meta';
                         metaDiv.textContent = `$${(entry.cost || 0).toFixed(6)} | ${entry.inputTokens}\u2192${entry.outputTokens} tok`;
-                        div.appendChild(roleDiv);
-                        div.appendChild(contentDiv);
                         div.appendChild(metaDiv);
                         container.appendChild(div);
                     }
@@ -4393,42 +5251,193 @@
                 // Scroll to bottom
                 const scrollContainer = document.getElementById('agentsMessagesContainer');
                 scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                this.agentsCurrentMessageIndex = -1;
+            }
+
+            agentsGetNavigableElements() {
+                return document.querySelectorAll('#agentsMessages > .message, #agentsMessages > .agent-responses-group');
+            }
+
+            agentsPrevMessage() {
+                const elements = this.agentsGetNavigableElements();
+                if (elements.length === 0) return;
+                if (this.agentsCurrentMessageIndex <= 0) {
+                    this.agentsCurrentMessageIndex = 0;
+                } else {
+                    this.agentsCurrentMessageIndex--;
+                }
+                this.agentsScrollToMessage(this.agentsCurrentMessageIndex);
+            }
+
+            agentsNextMessage() {
+                const elements = this.agentsGetNavigableElements();
+                if (elements.length === 0) return;
+                if (this.agentsCurrentMessageIndex >= elements.length - 1) {
+                    this.agentsCurrentMessageIndex = elements.length - 1;
+                } else {
+                    this.agentsCurrentMessageIndex++;
+                }
+                this.agentsScrollToMessage(this.agentsCurrentMessageIndex);
+            }
+
+            agentsScrollToMessage(index) {
+                const elements = this.agentsGetNavigableElements();
+                if (index >= 0 && index < elements.length) {
+                    this.agentsCurrentMessageIndex = index;
+                    elements[index].scrollIntoView({ behavior: 'auto', block: 'start' });
+                    this.updateAgentsNavButtons();
+                }
+            }
+
+            updateAgentsNavButtons() {
+                const elements = this.agentsGetNavigableElements();
+                const prevBtn = document.getElementById('agentsPrevMsg');
+                const nextBtn = document.getElementById('agentsNextMsg');
+                if (prevBtn && nextBtn) {
+                    prevBtn.disabled = this.agentsCurrentMessageIndex <= 0;
+                    nextBtn.disabled = this.agentsCurrentMessageIndex >= elements.length - 1;
+                }
+            }
+
+            showAgentsPageView() {
+                const messages = this.agentsManager.getSessionMessages();
+                if (messages.length === 0) return;
+
+                const modal = document.getElementById('pageModal');
+                modal.classList.add('active');
+                modal.setAttribute('aria-hidden', 'false');
+                requestAnimationFrame(() => {
+                    this.loadPageFontSize();
+                    this.buildAgentsPageViewPages(messages);
+                    this.renderPageViewPage(0);
+                });
+            }
+
+            buildAgentsPageViewPages(messages) {
+                const pageBody = document.getElementById('pageBody');
+                const measureEl = this.getPageMeasureElement();
+                const maxHeight = pageBody.clientHeight || 300;
+                const maxWidth = pageBody.clientWidth || 400;
+                measureEl.style.width = `${maxWidth}px`;
+
+                const pages = [];
+                let msgIndex = 0;
+
+                messages.forEach(entry => {
+                    if (entry.type === 'user') {
+                        const chunks = this.paginateTextToPages(entry.content || '', maxHeight, measureEl);
+                        const finalChunks = chunks.length ? chunks : [''];
+                        finalChunks.forEach((chunk, pageIndex) => {
+                            pages.push({
+                                messageIndex: msgIndex,
+                                messageCount: messages.length,
+                                pageIndex,
+                                pageCount: finalChunks.length,
+                                role: 'user',
+                                content: chunk
+                            });
+                        });
+                        msgIndex++;
+                    } else if (entry.type === 'orchestrator') {
+                        const chunks = this.paginateTextToPages(entry.content || '', maxHeight, measureEl);
+                        const finalChunks = chunks.length ? chunks : [''];
+                        finalChunks.forEach((chunk, pageIndex) => {
+                            pages.push({
+                                messageIndex: msgIndex,
+                                messageCount: messages.length,
+                                pageIndex,
+                                pageCount: finalChunks.length,
+                                role: 'assistant',
+                                model: entry.modelName,
+                                cost: entry.cost,
+                                inputTokens: entry.inputTokens,
+                                outputTokens: entry.outputTokens,
+                                content: chunk
+                            });
+                        });
+                        msgIndex++;
+                    } else if (entry.type === 'agent-responses') {
+                        entry.responses.forEach(r => {
+                            const text = `**${r.agentName}** (${r.modelName})\n\n${r.content || ''}`;
+                            const chunks = this.paginateTextToPages(text, maxHeight, measureEl);
+                            const finalChunks = chunks.length ? chunks : [''];
+                            finalChunks.forEach((chunk, pageIndex) => {
+                                pages.push({
+                                    messageIndex: msgIndex,
+                                    messageCount: messages.length,
+                                    pageIndex,
+                                    pageCount: finalChunks.length,
+                                    role: 'assistant',
+                                    model: r.modelName,
+                                    cost: r.cost,
+                                    inputTokens: r.inputTokens,
+                                    outputTokens: r.outputTokens,
+                                    content: chunk
+                                });
+                            });
+                            msgIndex++;
+                        });
+                    }
+                });
+
+                this.pageView.pages = pages;
+                this.pageView.index = 0;
             }
 
             buildProgressTracker(agents) {
                 const tracker = document.createElement('div');
                 tracker.className = 'agents-progress';
 
+                const isLeadMode = agents.length === 1;
                 const header = document.createElement('div');
                 header.className = 'agents-progress-header';
-                header.innerHTML = `<span class="spinner"></span><span>${this.t('agents.progressHeader')}</span>`;
+                header.innerHTML = `<span class="spinner"></span><span>${isLeadMode ? this.t('agents.leadHeader') : this.t('agents.progressHeader')}</span>`;
                 tracker.appendChild(header);
 
                 const rows = {};
+                const phaseMap = {};
                 agents.forEach(agent => {
-                    const row = document.createElement('div');
-                    row.className = 'agent-progress-row working';
-                    row.innerHTML = `
-                        <span class="agent-progress-icon"><span class="spinner"></span></span>
-                        <span class="agent-progress-name">${this.escapeHtml(agent.name)}</span>
-                        <span class="agent-progress-status">${this.t('agents.progressWorking')}</span>
-                        <span class="agent-progress-time"></span>
-                    `;
-                    tracker.appendChild(row);
-                    rows[agent.id] = { el: row, start: Date.now() };
+                    const p = agent.phase || 0;
+                    if (!phaseMap[p]) phaseMap[p] = [];
+                    phaseMap[p].push(agent);
+                });
+                const phaseKeys = Object.keys(phaseMap).map(Number).sort((a, b) => a - b);
+                const hasPhases = phaseKeys.length > 1;
+
+                phaseKeys.forEach((phaseNum, idx) => {
+                    if (hasPhases) {
+                        const phaseDiv = document.createElement('div');
+                        phaseDiv.style.cssText = 'font-size: 10px; color: #999; padding: 4px 8px 2px; text-transform: uppercase; letter-spacing: 0.5px; border-top: ' + (idx > 0 ? '1px dashed #ddd' : 'none') + '; margin-top: ' + (idx > 0 ? '4px' : '0') + ';';
+                        phaseDiv.textContent = `${this.t('agents.phaseLabel').replace(':', '')} ${idx + 1}`;
+                        tracker.appendChild(phaseDiv);
+                    }
+                    phaseMap[phaseNum].forEach(agent => {
+                        const row = document.createElement('div');
+                        row.className = 'agent-progress-row' + (idx === 0 ? ' working' : '');
+                        row.innerHTML = `
+                            <span class="agent-progress-icon">${idx === 0 ? '<span class="spinner"></span>' : '\u23F3'}</span>
+                            <span class="agent-progress-name">${this.escapeHtml(agent.name)}</span>
+                            <span class="agent-progress-status">${idx === 0 ? this.t('agents.progressWorking') : this.t('agents.progressWaiting')}</span>
+                            <span class="agent-progress-time"></span>
+                        `;
+                        tracker.appendChild(row);
+                        rows[agent.id] = { el: row, start: Date.now() };
+                    });
                 });
 
-                // Orchestrator row (hidden initially)
-                const orchRow = document.createElement('div');
-                orchRow.className = 'orchestrator-progress-row';
-                orchRow.style.display = 'none';
-                orchRow.innerHTML = `
-                    <span class="agent-progress-icon"><span class="spinner"></span></span>
-                    <span class="agent-progress-name">${this.t('agents.orchestratorLabel').replace(':', '')}</span>
-                    <span class="agent-progress-status">${this.t('agents.progressOrchestrator')}</span>
-                    <span class="agent-progress-time"></span>
-                `;
-                tracker.appendChild(orchRow);
+                let orchRow = null;
+                if (!isLeadMode) {
+                    orchRow = document.createElement('div');
+                    orchRow.className = 'orchestrator-progress-row';
+                    orchRow.style.display = 'none';
+                    orchRow.innerHTML = `
+                        <span class="agent-progress-icon"><span class="spinner"></span></span>
+                        <span class="agent-progress-name">${this.t('agents.orchestratorLabel').replace(':', '')}</span>
+                        <span class="agent-progress-status">${this.t('agents.progressOrchestrator')}</span>
+                        <span class="agent-progress-time"></span>
+                    `;
+                    tracker.appendChild(orchRow);
+                }
 
                 return { tracker, rows, header, orchRow };
             }
@@ -4475,31 +5484,27 @@
                     return;
                 }
 
-                // Read shared context/examples
                 const sharedPrompts = {
                     context: document.getElementById('agentsContext').value.trim(),
-                    examples: document.getElementById('agentsExamples').value.trim()
+                    orchestratorPrompt: document.getElementById('orchestratorPrompt').value.trim(),
+                    datetimeAnchor: this.datetimeAnchor
                 };
 
                 input.value = '';
                 document.getElementById('sendBtn').disabled = true;
 
-                // Build conversation context from previous session messages
                 const conversationContext = this.agentsManager.getSessionMessages().filter(
                     m => m.type === 'user' || m.type === 'orchestrator'
                 );
 
-                // Add user message
                 this.agentsManager.addSessionEntry({ type: 'user', content });
                 this.renderAgentsMessages();
 
-                // Build and show live progress tracker
                 const { tracker, rows, header, orchRow } = this.buildProgressTracker(agents);
                 document.getElementById('agentsMessages').appendChild(tracker);
                 const scrollContainer = document.getElementById('agentsMessagesContainer');
                 scrollContainer.scrollTop = scrollContainer.scrollHeight;
 
-                // Start elapsed time updater
                 const timerInterval = setInterval(() => {
                     Object.values(rows).forEach(rowData => {
                         if (rowData.el.classList.contains('working')) {
@@ -4508,8 +5513,7 @@
                             if (timeEl) timeEl.textContent = this.t('agents.progressTime', { seconds: elapsed });
                         }
                     });
-                    // Also update orchestrator timer if visible
-                    if (orchRow.style.display !== 'none' && !orchRow.classList.contains('done')) {
+                    if (orchRow && orchRow.style.display !== 'none' && !orchRow.classList.contains('done')) {
                         const orchTime = orchRow.querySelector('.agent-progress-time');
                         if (orchTime && orchRow._start) {
                             const elapsed = ((Date.now() - orchRow._start) / 1000).toFixed(1);
@@ -4519,65 +5523,135 @@
                 }, 200);
 
                 try {
-                    // Call all agents in parallel, updating progress as each completes
-                    const agentPromises = agents.map(agent => {
-                        return this.agentsManager.callAgent(agent, content, conversationContext, sharedPrompts)
-                            .then(result => {
-                                this.updateProgressRow(rows[agent.id], 'done',
-                                    `${this.t('agents.progressDone')} ($${(result.cost || 0).toFixed(6)})`);
-                                scrollContainer.scrollTop = scrollContainer.scrollHeight;
-                                return { status: 'fulfilled', value: result };
-                            })
-                            .catch(err => {
-                                this.updateProgressRow(rows[agent.id], 'error', err.message.substring(0, 60));
-                                scrollContainer.scrollTop = scrollContainer.scrollHeight;
-                                return { status: 'rejected', reason: err };
-                            });
+                    // Group agents by phase for sequential execution
+                    const phaseMap = {};
+                    agents.forEach(agent => {
+                        const phase = agent.phase || 0;
+                        if (!phaseMap[phase]) phaseMap[phase] = [];
+                        phaseMap[phase].push(agent);
                     });
+                    const phaseKeys = Object.keys(phaseMap).map(Number).sort((a, b) => a - b);
+                    const hasMultiplePhases = phaseKeys.length > 1 || (phaseKeys.length === 1 && phaseKeys[0] !== 0);
 
-                    const results = await Promise.all(agentPromises);
+                    let allResponses = [];
+                    let allErrors = [];
+                    let previousPhasesContext = '';
 
-                    const responses = results
-                        .filter(r => r.status === 'fulfilled')
-                        .map(r => r.value);
+                    for (const phaseNum of phaseKeys) {
+                        const phaseAgents = phaseMap[phaseNum];
 
-                    const errors = results
-                        .filter(r => r.status === 'rejected')
-                        .map(r => ({ agentName: 'Error', modelName: '-', content: r.reason.message, cost: 0, inputTokens: 0, outputTokens: 0 }));
+                        if (hasMultiplePhases && phaseKeys.length > 1) {
+                            const phaseIdx = phaseKeys.indexOf(phaseNum) + 1;
+                            header.querySelector('span:last-child').textContent =
+                                this.t('agents.phaseProgress', { phase: phaseIdx, total: phaseKeys.length });
+                        }
 
-                    const allResponses = [...responses, ...errors];
+                        const phaseSharedPrompts = { ...sharedPrompts };
+                        if (previousPhasesContext) {
+                            const existingCtx = phaseSharedPrompts.context || '';
+                            phaseSharedPrompts.context = existingCtx
+                                ? `${existingCtx}\n\n<PREVIOUS_AGENTS_OUTPUT>\n${previousPhasesContext}\n</PREVIOUS_AGENTS_OUTPUT>`
+                                : `<PREVIOUS_AGENTS_OUTPUT>\n${previousPhasesContext}\n</PREVIOUS_AGENTS_OUTPUT>`;
+                        }
 
-                    // Save agent responses
-                    this.agentsManager.addSessionEntry({ type: 'agent-responses', responses: allResponses });
+                        phaseAgents.forEach(agent => {
+                            const rowData = rows[agent.id];
+                            rowData.start = Date.now();
+                            rowData.el.className = 'agent-progress-row working';
+                            rowData.el.querySelector('.agent-progress-icon').innerHTML = '<span class="spinner"></span>';
+                            rowData.el.querySelector('.agent-progress-status').textContent = this.t('agents.progressWorking');
+                        });
 
-                    // Update header - agents done
-                    header.querySelector('.spinner').remove();
-                    header.querySelector('span:last-child').textContent =
-                        this.t('agents.agentResponses', { count: responses.length });
+                        const phasePromises = phaseAgents.map(agent => {
+                            return this.agentsManager.callAgent(agent, content, conversationContext, phaseSharedPrompts)
+                                .then(result => {
+                                    this.updateProgressRow(rows[agent.id], 'done',
+                                        `${this.t('agents.progressDone')} ($${(result.cost || 0).toFixed(6)})`);
+                                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                                    return { status: 'fulfilled', value: result };
+                                })
+                                .catch(err => {
+                                    this.updateProgressRow(rows[agent.id], 'error', err.message.substring(0, 60));
+                                    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                                    return { status: 'rejected', reason: err };
+                                });
+                        });
 
-                    // Show orchestrator progress
-                    if (responses.length > 0) {
-                        orchRow.style.display = 'flex';
-                        orchRow._start = Date.now();
-                        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                        const phaseResults = await Promise.all(phasePromises);
 
-                        const orchResult = await this.agentsManager.callOrchestrator(content, allResponses, conversationContext, sharedPrompts);
+                        const phaseResponses = phaseResults
+                            .filter(r => r.status === 'fulfilled')
+                            .map(r => r.value);
+                        const phaseErrors = phaseResults
+                            .filter(r => r.status === 'rejected')
+                            .map(r => ({ agentName: 'Error', modelName: '-', content: r.reason.message, cost: 0, inputTokens: 0, outputTokens: 0 }));
 
-                        orchRow.classList.add('done');
-                        orchRow.querySelector('.agent-progress-icon').textContent = '\u2713';
-                        orchRow.querySelector('.agent-progress-status').textContent = this.t('agents.progressOrchestratorDone');
-                        const orchElapsed = ((Date.now() - orchRow._start) / 1000).toFixed(1);
-                        orchRow.querySelector('.agent-progress-time').textContent =
-                            this.t('agents.progressTime', { seconds: orchElapsed });
+                        allResponses.push(...phaseResponses);
+                        allErrors.push(...phaseErrors);
 
+                        if (phaseResponses.length > 0) {
+                            const phaseOutputs = phaseResponses.map(r =>
+                                `[${r.agentName}]:\n${r.content}`
+                            ).join('\n\n---\n\n');
+                            previousPhasesContext += (previousPhasesContext ? '\n\n---\n\n' : '') + phaseOutputs;
+                        }
+                    }
+
+                    const responses = allResponses;
+                    const errors = allErrors;
+
+                    const isLeadMode = agents.length === 1;
+
+                    if (isLeadMode && responses.length === 1) {
+                        // LEAD MODE: single agent, skip orchestrator
+                        const lead = responses[0];
                         this.agentsManager.addSessionEntry({
                             type: 'orchestrator',
-                            content: orchResult.content,
-                            cost: orchResult.cost,
-                            inputTokens: orchResult.inputTokens,
-                            outputTokens: orchResult.outputTokens,
-                            modelName: orchResult.modelName
+                            isLead: true,
+                            content: lead.content,
+                            cost: lead.cost,
+                            inputTokens: lead.inputTokens,
+                            outputTokens: lead.outputTokens,
+                            modelName: lead.modelName,
+                            agentName: lead.agentName
                         });
+
+                        header.querySelector('.spinner').remove();
+                        header.querySelector('span:last-child').textContent =
+                            this.t('agents.leadDone');
+
+                    } else {
+                        // MULTI-AGENT MODE: orchestrate
+                        const combinedResponses = [...responses, ...errors];
+                        this.agentsManager.addSessionEntry({ type: 'agent-responses', responses: combinedResponses });
+
+                        header.querySelector('.spinner').remove();
+                        header.querySelector('span:last-child').textContent =
+                            this.t('agents.agentResponses', { count: responses.length });
+
+                        if (responses.length > 0) {
+                            orchRow.style.display = 'flex';
+                            orchRow._start = Date.now();
+                            scrollContainer.scrollTop = scrollContainer.scrollHeight;
+
+                            const orchResult = await this.agentsManager.callOrchestrator(content, combinedResponses, conversationContext, sharedPrompts);
+
+                            orchRow.classList.add('done');
+                            orchRow.querySelector('.agent-progress-icon').textContent = '\u2713';
+                            orchRow.querySelector('.agent-progress-status').textContent = this.t('agents.progressOrchestratorDone');
+                            const orchElapsed = ((Date.now() - orchRow._start) / 1000).toFixed(1);
+                            orchRow.querySelector('.agent-progress-time').textContent =
+                                this.t('agents.progressTime', { seconds: orchElapsed });
+
+                            this.agentsManager.addSessionEntry({
+                                type: 'orchestrator',
+                                content: orchResult.content,
+                                cost: orchResult.cost,
+                                inputTokens: orchResult.inputTokens,
+                                outputTokens: orchResult.outputTokens,
+                                modelName: orchResult.modelName
+                            });
+                        }
                     }
 
                 } catch (error) {
@@ -4593,8 +5667,17 @@
                 }
 
                 clearInterval(timerInterval);
+
+                // Auto-disable agents marked with autoDisable
+                this.agentsManager.getAgents().forEach(a => {
+                    if (a.autoDisable && a.enabled !== false) {
+                        this.agentsManager.updateAgent(a.id, { enabled: false });
+                    }
+                });
+
                 document.getElementById('sendBtn').disabled = false;
                 this.renderAgentsMessages();
+                this.renderAgentsCards();
             }
 
             exportAgentsSession() {
@@ -4760,17 +5843,70 @@
                     if (orchSelect) orchSelect.value = snapshot.orchestratorModelId;
                 }
 
-                // Restore context/examples
+                // Restore orchestrator prompt
+                const orchPromptEl = document.getElementById('orchestratorPrompt');
+                if (orchPromptEl) {
+                    orchPromptEl.value = snapshot.orchestratorPrompt || this.t('agents.orchestratorRole');
+                    localStorage.setItem('agents_orchestrator_prompt_online', orchPromptEl.value);
+                }
+
+                // Restore context
                 const ctxEl = document.getElementById('agentsContext');
-                const exEl = document.getElementById('agentsExamples');
                 if (ctxEl) {
                     ctxEl.value = snapshot.context || '';
                     localStorage.setItem('agents_context_online', ctxEl.value);
                 }
-                if (exEl) {
-                    exEl.value = snapshot.examples || '';
-                    localStorage.setItem('agents_examples_online', exEl.value);
+            }
+
+            // ===== CODE PREVIEW =====
+            openPreview(messageContent) {
+                const blocks = extractCodeBlocks(messageContent);
+                const doc = buildPreviewDocument(blocks);
+
+                const modal = document.getElementById('previewModal');
+                modal.classList.add('active');
+                modal.setAttribute('aria-hidden', 'false');
+
+                // Render in iframe
+                const frame = document.getElementById('previewFrame');
+                frame.srcdoc = doc;
+
+                // Show source
+                document.getElementById('previewSourceCode').textContent = doc;
+
+                // Reset to render tab
+                this.setPreviewTab('render');
+
+                // Tab listeners (re-bind each time)
+                document.getElementById('previewTabRender').onclick = () => this.setPreviewTab('render');
+                document.getElementById('previewTabSource').onclick = () => this.setPreviewTab('source');
+            }
+
+            setPreviewTab(tab) {
+                const renderPane = document.getElementById('previewRenderPane');
+                const sourcePane = document.getElementById('previewSourcePane');
+                const renderBtn = document.getElementById('previewTabRender');
+                const sourceBtn = document.getElementById('previewTabSource');
+
+                if (tab === 'render') {
+                    renderPane.style.display = '';
+                    sourcePane.classList.remove('active');
+                    renderBtn.classList.add('active');
+                    sourceBtn.classList.remove('active');
+                } else {
+                    renderPane.style.display = 'none';
+                    sourcePane.classList.add('active');
+                    renderBtn.classList.remove('active');
+                    sourceBtn.classList.add('active');
                 }
+            }
+
+            closePreview() {
+                const modal = document.getElementById('previewModal');
+                modal.classList.remove('active');
+                modal.setAttribute('aria-hidden', 'true');
+                // Clear iframe
+                document.getElementById('previewFrame').srcdoc = '';
             }
 
             // ===== CREDIT MANAGEMENT =====
@@ -4867,13 +6003,18 @@
             }
 
             addAgent(agent) {
-                this.agents.push({
+                const entry = {
                     id: Date.now(),
                     name: agent.name || '',
                     role: agent.role || '',
                     modelId: agent.modelId || this.models[0].id,
-                    enabled: true
-                });
+                    enabled: agent.enabled !== false
+                };
+                if (agent.preset) entry.preset = agent.preset;
+                if (agent.lockedModel) entry.lockedModel = true;
+                if (agent.autoDisable) entry.autoDisable = true;
+                if (agent.phase) entry.phase = agent.phase;
+                this.agents.push(entry);
                 this.saveAgents();
             }
 
@@ -4932,8 +6073,8 @@
                 return {
                     agents: JSON.parse(JSON.stringify(this.agents)),
                     orchestratorModelId: this.getOrchestratorModelId(),
-                    context: document.getElementById('agentsContext')?.value || '',
-                    examples: document.getElementById('agentsExamples')?.value || ''
+                    orchestratorPrompt: document.getElementById('orchestratorPrompt')?.value || '',
+                    context: document.getElementById('agentsContext')?.value || ''
                 };
             }
 
@@ -4993,11 +6134,10 @@
 
                 const messages = [];
 
-                // Build system message from agent role + shared context/examples
                 const systemParts = [];
+                if (sharedPrompts?.datetimeAnchor) systemParts.push(`Current date and time: ${new Date().toLocaleString()}`);
                 if (agent.role) systemParts.push(agent.role);
                 if (sharedPrompts?.context) systemParts.push(`<CONTEXT>\n${sharedPrompts.context}\n</CONTEXT>`);
-                if (sharedPrompts?.examples) systemParts.push(`<OUTPUT_STYLE>\n${sharedPrompts.examples}\n</OUTPUT_STYLE>`);
                 if (systemParts.length > 0) {
                     messages.push({ role: 'system', content: systemParts.join('\n\n') });
                 }
@@ -5052,9 +6192,11 @@
                 const orchestratorModelId = this.getOrchestratorModelId();
                 const model = this.models.find(m => m.id === orchestratorModelId) || this.models[0];
 
-                const systemParts = [this.t('agents.orchestratorRole')];
+                const orchPrompt = sharedPrompts?.orchestratorPrompt || this.t('agents.orchestratorRole');
+                const systemParts = [];
+                if (sharedPrompts?.datetimeAnchor) systemParts.push(`Current date and time: ${new Date().toLocaleString()}`);
+                systemParts.push(orchPrompt);
                 if (sharedPrompts?.context) systemParts.push(`<CONTEXT>\n${sharedPrompts.context}\n</CONTEXT>`);
-                if (sharedPrompts?.examples) systemParts.push(`<OUTPUT_STYLE>\n${sharedPrompts.examples}\n</OUTPUT_STYLE>`);
 
                 // Build the agent responses summary
                 const responseSummary = agentResponses.map(r =>
