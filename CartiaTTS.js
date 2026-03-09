@@ -110,8 +110,20 @@ class CartiaTTS extends HTMLElement {
     static _requestId = 0;
     static _loadingListeners = [];
 
+    // Voci Piper di default per lingua
+    static defaultVoices = {
+        it: 'it_IT-paola-medium',
+        en: 'en_US-amy-medium',
+    };
+
+    // Locale Web Speech API per lingua
+    static speechLocales = {
+        it: 'it-IT',
+        en: 'en-US',
+    };
+
     static get observedAttributes() {
-        return ['data-text', 'data-voice', 'data-engine', 'data-speed', 'data-label'];
+        return ['data-text', 'data-voice', 'data-engine', 'data-speed', 'data-label', 'data-lang'];
     }
 
     constructor() {
@@ -185,7 +197,11 @@ class CartiaTTS extends HTMLElement {
     }
 
     get voice() {
-        return this.getAttribute('data-voice') || 'it_IT-paola-medium';
+        return this.getAttribute('data-voice') || CartiaTTS.defaultVoices[this.lang] || 'en_US-amy-medium';
+    }
+
+    get lang() {
+        return this.getAttribute('data-lang') || 'en';
     }
 
     get engine() {
@@ -384,13 +400,15 @@ class CartiaTTS extends HTMLElement {
                 return;
             }
             const utt = new SpeechSynthesisUtterance(chunks[index]);
-            utt.lang = 'it-IT';
+            const locale = CartiaTTS.speechLocales[this.lang] || 'en-US';
+            const langPrefix = locale.split('-')[0];
+            utt.lang = locale;
             utt.rate = this.speed;
 
             const voices = window.speechSynthesis.getVoices();
-            const itVoice = voices.find(v => v.lang.startsWith('it') && v.localService)
-                || voices.find(v => v.lang.startsWith('it'));
-            if (itVoice) utt.voice = itVoice;
+            const matchVoice = voices.find(v => v.lang.startsWith(langPrefix) && v.localService)
+                || voices.find(v => v.lang.startsWith(langPrefix));
+            if (matchVoice) utt.voice = matchVoice;
 
             utt.onend = () => { index++; speakNext(); };
             utt.onerror = () => { this._setPlaying(false); };

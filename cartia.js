@@ -36,6 +36,7 @@
             background: var(--bg-color);
             color: var(--text-color);
             height: 100vh;
+            height: 100dvh;
             display: flex;
             flex-direction: column;
         }
@@ -281,6 +282,7 @@
         #app {
             display: none;
             height: 100vh;
+            height: 100dvh;
             flex-direction: column;
         }
 
@@ -412,6 +414,7 @@
         #messagesContainer {
             flex: 1;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             padding: 20px;
         }
 
@@ -1508,6 +1511,7 @@
         .agents-messages-container {
             flex: 1;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             padding: 20px;
         }
 
@@ -3345,9 +3349,20 @@ RULES:
                 this._scope = null; // 'message' | 'global'
             }
 
+            setLang(lang) {
+                this._lang = lang || 'en';
+                if (this._engine) {
+                    this._engine.setAttribute('data-lang', this._lang);
+                }
+            }
+
             _ensureEngine() {
-                if (this._engine) return this._engine;
+                if (this._engine) {
+                    this._engine.setAttribute('data-lang', this._lang || 'en');
+                    return this._engine;
+                }
                 this._engine = document.createElement('cartia-tts');
+                this._engine.setAttribute('data-lang', this._lang || 'en');
                 this._engine.style.display = 'none';
                 (_root.host || document.body).appendChild(this._engine);
                 return this._engine;
@@ -3955,6 +3970,7 @@ RULES:
             constructor() {
                 this.langStorageKey = 'lang_online';
                 this.lang = this.getInitialLanguage();
+                ttsReader.setLang(this.lang);
                 this.apiKeyManager = new ApiKeyManager();
                 this.modelSelector = new ModelSelector(MODELS);
                 this.conversationManager = new ConversationManager();
@@ -4047,6 +4063,7 @@ RULES:
             setLanguage(lang) {
                 if (lang !== 'it' && lang !== 'en') return;
                 this.lang = lang;
+                ttsReader.setLang(lang);
                 localStorage.setItem(this.langStorageKey, lang);
                 this.updateLanguageControls();
                 this.chatUI.setTranslator((key, vars) => this.t(key, vars));
