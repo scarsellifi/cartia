@@ -13,13 +13,541 @@
     <meta name="twitter:title" content="CARTIA (Online)">
     <meta name="twitter:description" content="An e-ink friendly AI chat focused on readability, prompt engineering, and low eye strain.">
     <style>
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+        cartia-app { display: block; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+    <script>
+// tts-worker.js (inlined for monolithic build)
+window.__TTS_WORKER_CODE__ = "/**\n * tts-worker.js - Web Worker per Piper TTS\n *\n * Esegue il caricamento della libreria e la sintesi vocale off-main-thread.\n * Comunica con CartiaTTS.js via postMessage.\n *\n * Messaggi IN:\n *   { type: 'init', voice: 'it_IT-riccardo-x_low' }\n *   { type: 'predict', id, text, voice, speed }\n *\n * Messaggi OUT:\n *   { type: 'ready' }\n *   { type: 'download-progress', loaded: 0.75 }\n *   { type: 'result', id, wavBlob: Blob }\n *   { type: 'error', id?, error: string }\n */\n\nlet ttsModule = null;\n\nself.onmessage = async (e) => {\n    const msg = e.data;\n\n    if (msg.type === 'init') {\n        try {\n            await ensureLoaded(msg.voice);\n            self.postMessage({ type: 'ready' });\n        } catch (err) {\n            self.postMessage({ type: 'error', error: err.message });\n        }\n        return;\n    }\n\n    if (msg.type === 'predict') {\n        try {\n            await ensureLoaded(msg.voice);\n\n            const wav = await ttsModule.predict({\n                text: msg.text,\n                voiceId: msg.voice,\n                speed: msg.speed || 1.0,\n            });\n\n            self.postMessage({ type: 'result', id: msg.id, wavBlob: wav });\n        } catch (err) {\n            self.postMessage({ type: 'error', id: msg.id, error: err.message });\n        }\n        return;\n    }\n};\n\nasync function ensureLoaded(voice) {\n    if (ttsModule) return;\n\n    ttsModule = await import(\n        'https://cdn.jsdelivr.net/npm/@mintplex-labs/piper-tts-web@1.0.2/+esm'\n    );\n\n    const stored = await ttsModule.stored();\n    if (!stored.includes(voice)) {\n        await ttsModule.download(voice, (progress) => {\n            self.postMessage({\n                type: 'download-progress',\n                loaded: progress.loaded,\n            });\n        });\n    }\n}\n";
+    </script>
+    <script>
+/**
+ * CartiaTTS - Web Component per Text-to-Speech
+ *
+ * Engine:
+ * - Primary: Piper TTS via Web Worker (off-main-thread)
+ * - Fallback: Web Speech API (speechSynthesis)
+ *
+ * ---------------------------------------------------------------------------
+ * QUICK START (portable)
+ * ---------------------------------------------------------------------------
+ * 1) Copy these files: CartiaTTS.js, tts-worker.js
+ *
+ * 2) Include: cartia-tts-script src="CartiaTTS.js"
+ *
+ * 3) Use element: cartia-tts data-text="Text to read"
+ *    Voices:  cartia-tts data-text="..." data-voice="it_IT-paola-medium"
+ *    Engine:  cartia-tts data-text="..." data-engine="speech-api"
+ *
+ * 4) JS API:
+ *    const el = document.querySelector('cartia-tts');
+ *    el.speak('Text to read');
+ *    el.stop();
+ *
+ * Emitted events:
+ * - tts-loading: model loading started
+ * - tts-start: playback started
+ * - tts-end: playback finished (or explicit user stop)
+ * - tts-error: unrecoverable error
+ *
+ * Supported attributes:
+ * - data-text   : text to read
+ * - data-voice  : Piper voice (default: it_IT-paola-medium)
+ * - data-engine : "piper" (default) | "speech-api" | "webspeech"
+ * - data-speed  : playback speed (float, default 1.0)
+ * - data-label  : custom button label
+ *
+ * ---------------------------------------------------------------------------
+ * RECOMMENDED PLAYER PATTERN (paragraph/section navigation)
+ * ---------------------------------------------------------------------------
+ * Use one hidden cartia-tts engine and control your own external UI.
+ *
+ * Core loop idea:
+ * - Build an ordered list of readable blocks (headings, paragraphs, list items).
+ * - Speak one block at a time.
+ * - Wait for tts-end before advancing.
+ * - Treat tts-error as failure (reject current step), not as normal completion.
+ *
+ * Skip / Prev / Next:
+ * - Set target index directly (index = target).
+ * - Set a "jumpRequested" flag.
+ * - Call engine.stop() and settle current wait.
+ * - In loop: if jumpRequested is true, clear it and continue WITHOUT auto index++.
+ *   This avoids accidental "double skip" jumps.
+ * - Use a per-call token/counter in your state object and ignore events from
+ *   stale calls; handle tts-end only after tts-start of the same call.
+ *
+ * Pause / Resume:
+ * - Pause: set paused=true, pauseRequested=true, call engine.stop().
+ * - Resume: clear paused and resolve the pending pause promise.
+ * - While paused, prev/next can move index immediately without restarting playback.
+ *
+ * Coexisting controls (recommended UX):
+ * - Keep audio controls hidden by default behind an explicit user switch.
+ * - Provide a one-line explanation near the switch (what gets enabled).
+ * - Highlight utility near the switch (e.g. "listen while doing other tasks").
+ * - Keep global controls (prev / play-pause / stop / next).
+ * - Also add one small inline play button per readable block.
+ * - Inline button behavior:
+ *   - click on current playing block -> pause
+ *   - click on current paused block -> resume
+ *   - click on different block -> start from that block
+ * - If user does nothing, continue automatically to next block.
+ *
+ * Inline button implementation notes:
+ * - Decorate blocks after HTML rendering (headings, paragraphs, list items).
+ * - Store a stable block index in dataset (e.g. data-tts-index).
+ * - Use event delegation on the container for inline button clicks.
+ * - Update inline button state whenever playback state/index changes.
+ *   Example: inactive='play icon', active+playing='pause icon', active+paused='play icon'
+ *
+ * IMPORTANT when extracting speech text:
+ * - Do not read raw block.textContent if the block contains inline controls/icons.
+ * - Clone the block, remove inline control nodes, then read clone.textContent.
+ * - This prevents TTS from reading UI symbols/labels (e.g. play/pause glyphs).
+ *
+ * Event semantics (important to avoid race conditions):
+ * - speak(): silently cleanup previous playback (no synthetic tts-end).
+ * - stop(): explicit user stop; emits tts-end to unblock external waiters.
+ * - If primary engine fails but fallback starts successfully, do NOT emit tts-error.
+ *
+ * Stability tips:
+ * - For long content, assign text via JS property (`el.text = longText`) instead of
+ *   very large HTML attributes.
+ * - Before stopping/replacing audio objects, remove old handlers to prevent ghost
+ *   onended/onerror callbacks from stale instances.
+ * - On page/tab transitions, call your external stop handler on `beforeunload`,
+ *   `pagehide`, and `visibilitychange` (hidden) to avoid lingering playback.
+ *
+ * Worker note:
+ * - Worker path defaults to tts-worker.js (same directory).
+ *   If changed, update CartiaTTS._initWorker().
+ */
+
+class CartiaTTS extends HTMLElement {
+    // Worker condiviso fra tutte le istanze
+    static _worker = null;
+    static _workerReady = false;
+    static _workerLoading = false;
+    static _pendingCallbacks = new Map();
+    static _requestId = 0;
+    static _loadingListeners = [];
+
+    static get observedAttributes() {
+        return ['data-text', 'data-voice', 'data-engine', 'data-speed', 'data-label'];
+    }
+
+    constructor() {
+        super();
+        this._playing = false;
+        this._loading = false;
+        this._audio = null;
+        this._audioUrl = null;
+        this._utterance = null;
+        this._text = null;
+
+        this.attachShadow({ mode: 'open' });
+        this.shadowRoot.innerHTML = `
+            <style>
+                :host { display: inline-block; }
+                button {
+                    background: none;
+                    border: 1.5px solid currentColor;
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    cursor: pointer;
+                    font-size: 0.85rem;
+                    font-family: inherit;
+                    color: inherit;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    transition: opacity 0.2s, background 0.2s;
+                    line-height: 1;
+                }
+                button:hover { background: rgba(0,0,0,0.05); }
+                button:active { opacity: 0.7; }
+                button[disabled] { opacity: 0.5; cursor: wait; }
+                .icon { width: 18px; height: 18px; flex-shrink: 0; }
+                .spinner { animation: spin 1s linear infinite; }
+                @keyframes spin { to { transform: rotate(360deg); } }
+            </style>
+            <button part="button">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                </svg>
+                <span class="label"></span>
+            </button>
+        `;
+
+        this._btn = this.shadowRoot.querySelector('button');
+        this._iconContainer = this.shadowRoot.querySelector('.icon');
+        this._labelEl = this.shadowRoot.querySelector('.label');
+        this._btn.addEventListener('click', () => this._toggle());
+    }
+
+    connectedCallback() {
+        this._updateLabel();
+    }
+
+    attributeChangedCallback() {
+        this._updateLabel();
+    }
+
+    // --- Proprietà pubbliche ---
+
+    get text() {
+        if (typeof this._text === 'string') return this._text;
+        return this.getAttribute('data-text') || '';
+    }
+
+    set text(v) {
+        this._text = String(v || '');
+    }
+
+    get voice() {
+        return this.getAttribute('data-voice') || 'it_IT-paola-medium';
+    }
+
+    get engine() {
+        return this.getAttribute('data-engine') || 'piper';
+    }
+
+    get speed() {
+        return parseFloat(this.getAttribute('data-speed')) || 1.0;
+    }
+
+    // --- API pubblica ---
+
+    async speak(text) {
+        // Cleanup silenzioso: ferma audio/speech SENZA emettere tts-end.
+        // Così il loop paragrafo-per-paragrafo non viene confuso da eventi spuri.
+        this._silentCleanup();
+        this._stopped = false;
+        const cleanText = this._stripMarkdown(text || this.text);
+        if (!cleanText) return;
+
+        if (this.engine === 'speech-api' || this.engine === 'webspeech') {
+            return this._speakWebSpeech(cleanText);
+        }
+        return this._speakPiper(cleanText);
+    }
+
+    stop() {
+        this._stopped = true;
+        this._silentCleanup();
+        // Lo stop esplicito deve sempre sbloccare i wait esterni.
+        this._setPlaying(false, { forceEnd: true });
+    }
+
+    _silentCleanup() {
+        if (this._audio) {
+            this._audio.onended = null;
+            this._audio.onerror = null;
+            this._audio.pause();
+            this._audio.currentTime = 0;
+            this._audio = null;
+        }
+        if (this._audioUrl) {
+            URL.revokeObjectURL(this._audioUrl);
+            this._audioUrl = null;
+        }
+        if (this._utterance) {
+            this._utterance.onend = null;
+            this._utterance.onerror = null;
+            window.speechSynthesis.cancel();
+            this._utterance = null;
+        }
+        this._playing = false;
+    }
+
+    // --- Engine: Piper TTS via Web Worker ---
+
+    static _initWorker() {
+        if (CartiaTTS._worker) return;
+
+        if (typeof __TTS_WORKER_CODE__ === 'string') {
+            const blob = new Blob([__TTS_WORKER_CODE__], { type: 'application/javascript' });
+            CartiaTTS._worker = new Worker(URL.createObjectURL(blob), { type: 'module' });
+        } else {
+            CartiaTTS._worker = new Worker('tts-worker.js', { type: 'module' });
+        }
+        CartiaTTS._worker.onmessage = (e) => {
+            const msg = e.data;
+
+            if (msg.type === 'ready') {
+                CartiaTTS._workerReady = true;
+                CartiaTTS._workerLoading = false;
+                return;
+            }
+
+            if (msg.type === 'download-progress') {
+                CartiaTTS._loadingListeners.forEach(fn => fn(msg.loaded));
+                return;
+            }
+
+            if (msg.type === 'result' || msg.type === 'error') {
+                const cb = CartiaTTS._pendingCallbacks.get(msg.id);
+                if (cb) {
+                    CartiaTTS._pendingCallbacks.delete(msg.id);
+                    if (msg.type === 'error') {
+                        cb.reject(new Error(msg.error));
+                    } else {
+                        cb.resolve(msg.wavBlob);
+                    }
+                }
+                return;
+            }
+        };
+    }
+
+    _predictViaWorker(text) {
+        CartiaTTS._initWorker();
+
+        const id = ++CartiaTTS._requestId;
+        return new Promise((resolve, reject) => {
+            CartiaTTS._pendingCallbacks.set(id, { resolve, reject });
+            CartiaTTS._worker.postMessage({
+                type: 'predict',
+                id,
+                text,
+                voice: this.voice,
+                speed: this.speed,
+            });
+        });
+    }
+
+    async _speakPiper(text) {
+        this._stopped = false;
+        let onProgress = null;
+
+        try {
+            this._setLoading(true);
+            this.dispatchEvent(new CustomEvent('tts-loading', {
+                bubbles: true, detail: { voice: this.voice }
+            }));
+
+            // Listener per progresso download (condiviso)
+            onProgress = (loaded) => {
+                const pct = Math.round(loaded * 100);
+                this._labelEl.textContent = `${pct}%`;
+            };
+            CartiaTTS._loadingListeners.push(onProgress);
+
+            const wav = await this._predictViaWorker(text);
+
+            // Se stop() è stato chiamato durante il predict, non suonare
+            if (this._stopped) {
+                this._setLoading(false);
+                return;
+            }
+
+            this._setLoading(false);
+            this._setPlaying(true);
+
+            const url = URL.createObjectURL(wav);
+            this._audio = new Audio(url);
+            this._audioUrl = url;
+            this._audio.onended = () => {
+                URL.revokeObjectURL(url);
+                this._audioUrl = null;
+                this._setPlaying(false);
+            };
+            this._audio.onerror = () => {
+                URL.revokeObjectURL(url);
+                this._audioUrl = null;
+                this._setPlaying(false);
+            };
+            const playPromise = this._audio.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch((playErr) => {
+                    this._silentCleanup();
+                    this.dispatchEvent(new CustomEvent('tts-error', {
+                        bubbles: true,
+                        detail: { engine: 'piper', error: playErr?.message || 'Audio playback failed' }
+                    }));
+                });
+            }
+            this.dispatchEvent(new CustomEvent('tts-start', { bubbles: true }));
+        } catch (err) {
+            this._setLoading(false);
+            console.warn('[CartiaTTS] Piper fallback a Web Speech API:', err.message);
+            // NON emettere tts-error qui: il fallback Web Speech gestirà
+            // tts-start e tts-end autonomamente. Emettere tts-error causerebbe
+            // al loop chiamante di avanzare al paragrafo successivo prematuramente.
+            return this._speakWebSpeech(text);
+        } finally {
+            if (onProgress) {
+                const idx = CartiaTTS._loadingListeners.indexOf(onProgress);
+                if (idx >= 0) CartiaTTS._loadingListeners.splice(idx, 1);
+            }
+        }
+    }
+
+    // --- Engine: Web Speech API (fallback) ---
+
+    _speakWebSpeech(text) {
+        if (!window.speechSynthesis) {
+            this.dispatchEvent(new CustomEvent('tts-error', {
+                bubbles: true, detail: { engine: 'webspeech', error: 'Non supportato' }
+            }));
+            return;
+        }
+
+        const chunks = this._chunkText(text, 200);
+        this._setPlaying(true);
+        this.dispatchEvent(new CustomEvent('tts-start', { bubbles: true }));
+
+        let index = 0;
+        const speakNext = () => {
+            if (index >= chunks.length || !this._playing) {
+                this._setPlaying(false);
+                return;
+            }
+            const utt = new SpeechSynthesisUtterance(chunks[index]);
+            utt.lang = 'it-IT';
+            utt.rate = this.speed;
+
+            const voices = window.speechSynthesis.getVoices();
+            const itVoice = voices.find(v => v.lang.startsWith('it') && v.localService)
+                || voices.find(v => v.lang.startsWith('it'));
+            if (itVoice) utt.voice = itVoice;
+
+            utt.onend = () => { index++; speakNext(); };
+            utt.onerror = () => { this._setPlaying(false); };
+            this._utterance = utt;
+            window.speechSynthesis.speak(utt);
+        };
+        speakNext();
+    }
+
+    // --- UI ---
+
+    _toggle() {
+        if (this._loading) return;
+        if (this._playing) {
+            this.stop();
+        } else {
+            this.speak();
+        }
+    }
+
+    _setPlaying(playing, opts = {}) {
+        const forceEnd = !!opts.forceEnd;
+        const wasPlaying = this._playing;
+        this._playing = playing;
+        this._updateIcon();
+        this._updateLabel();
+        if (!playing && (wasPlaying || forceEnd)) {
+            this.dispatchEvent(new CustomEvent('tts-end', { bubbles: true }));
+        }
+    }
+
+    _setLoading(loading) {
+        this._loading = loading;
+        this._btn.disabled = loading;
+        this._updateIcon();
+    }
+
+    _updateLabel() {
+        if (this._loading) return;
+        const custom = this.getAttribute('data-label');
+        this._labelEl.textContent = custom || (this._playing ? 'Stop' : 'Ascolta');
+    }
+
+    _updateIcon() {
+        if (this._loading) {
+            this._iconContainer.outerHTML = `
+                <svg class="icon spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>`;
+            this._iconContainer = this.shadowRoot.querySelector('.icon');
+        } else if (this._playing) {
+            this._iconContainer.outerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <rect x="6" y="4" width="4" height="16" rx="1"/>
+                    <rect x="14" y="4" width="4" height="16" rx="1"/>
+                </svg>`;
+            this._iconContainer = this.shadowRoot.querySelector('.icon');
+        } else {
+            this._iconContainer.outerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                </svg>`;
+            this._iconContainer = this.shadowRoot.querySelector('.icon');
+        }
+    }
+
+    // --- Utilità ---
+
+    _stripMarkdown(text) {
+        return text
+            .replace(/<[^>]+>/g, '')
+            .replace(/^#{1,6}\s+/gm, '')
+            .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+            .replace(/_{1,3}([^_]+)_{1,3}/g, '$1')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/^>\s+/gm, '')
+            .replace(/^[\s]*[-*+]\s+/gm, '')
+            .replace(/^[\s]*\d+\.\s+/gm, '')
+            .replace(/^[-*_]{3,}$/gm, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    _chunkText(text, maxLen) {
+        const sentences = text.split(/(?<=[.!?;:])\s+/);
+        const chunks = [];
+        let current = '';
+
+        for (const sentence of sentences) {
+            if ((current + ' ' + sentence).length > maxLen && current) {
+                chunks.push(current.trim());
+                current = sentence;
+            } else {
+                current += (current ? ' ' : '') + sentence;
+            }
+        }
+        if (current.trim()) chunks.push(current.trim());
+        return chunks.length ? chunks : [text];
+    }
+}
+
+customElements.define('cartia-tts', CartiaTTS);
+
+    </script>
+    <script>
+/**
+ * CARTIA Web Component
+ * E-ink friendly AI chat with multi-agent orchestration
+ * Usage: <cartia-app></cartia-app>
+ * Requires: DOMPurify and marked.js loaded globally
+ */
+(function() {
+    'use strict';
+
+    let _root;
+    let _host;
+
+    const CARTIA_CSS = `
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
-        :root {
+        :host {
             /* Colori ottimizzati per e-ink a colori */
             --bg-color: #ffffff;
             --text-color: #000000;
@@ -32,9 +560,6 @@
             --message-assistant-bg: #f0f5e8;
             --message-assistant-border: #7a9a5a;
             --meta-text: #666666;
-        }
-
-        body {
             font-family: 'Georgia', 'Times New Roman', serif;
             font-size: 16px;
             line-height: 1.6;
@@ -1088,7 +1613,7 @@
         }
 
         @media (max-width: 720px) {
-            body {
+            :host {
                 --bottom-bar-offset: 78px;
             }
 
@@ -1142,16 +1667,16 @@
                 display: flex;
             }
 
-            body.prompt-collapsed #promptPanel,
-            body.prompt-collapsed .prompt-hint {
+            :host(.prompt-collapsed) #promptPanel,
+            :host(.prompt-collapsed) .prompt-hint {
                 display: none;
             }
 
-            body.bottom-collapsed #bottomBar {
+            :host(.bottom-collapsed) #bottomBar {
                 display: none;
             }
 
-            body.bottom-collapsed {
+            :host(.bottom-collapsed) {
                 --bottom-bar-offset: 8px;
             }
 
@@ -1173,7 +1698,7 @@
                 padding-bottom: calc(20px + var(--bottom-bar-offset));
             }
 
-            body.bottom-collapsed #messagesContainer {
+            :host(.bottom-collapsed) #messagesContainer {
                 padding-bottom: 20px;
             }
 
@@ -1871,6 +2396,55 @@
             background: #fee;
         }
 
+        /* TTS Controls */
+        .tts-block-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            border: 1.5px solid var(--border-color);
+            border-radius: 50%;
+            background: var(--bg-color);
+            color: var(--text-color);
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            flex-shrink: 0;
+            vertical-align: middle;
+            margin-left: 6px;
+        }
+
+        .tts-block-btn:hover { opacity: 0.9; }
+        .tts-block-btn.tts-active { opacity: 1; border-color: var(--message-assistant-border); }
+        .tts-block-btn.tts-loading { opacity: 0.5; cursor: wait; }
+
+        .tts-block-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .tts-global-btn {
+            position: relative;
+        }
+
+        .tts-global-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .tts-global-btn.tts-playing {
+            background: var(--message-assistant-bg);
+            border-color: var(--message-assistant-border);
+        }
+
+        .tts-reading-highlight {
+            outline: 2px solid var(--message-assistant-border);
+            outline-offset: -2px;
+            border-radius: 4px;
+        }
+
         /* Code Preview */
         .preview-btn {
             display: inline-flex;
@@ -2070,9 +2644,9 @@
             background: var(--message-assistant-bg);
         }
 
-    </style>
-</head>
-<body>
+`;
+
+    const CARTIA_HTML = `
     <!-- API Key Setup Overlay -->
     <div id="setupScreen" aria-hidden="true" inert>
         <div class="setup-container">
@@ -2179,6 +2753,8 @@
             <button id="reasoningToggle" class="hidden" title="Reasoning: OFF">🧠</button>
             <button id="datetimeToggle" title="Ancoraggio temporale: OFF" data-i18n-title="nav.datetimeTitle">🕐</button>
             <button id="autoScrollToggle" title="Toggle auto-scroll" data-i18n-title="nav.autoScrollTitle">👁️</button>
+            <button class="nav-btn tts-global-btn" id="ttsGlobalBtn" title="Leggi tutta la chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+            <button class="nav-btn" id="ttsStopBtn" title="Ferma lettura" style="display:none">&#x23F9;</button>
             <button id="exportBtn" title="Export chat (MD)" data-i18n-title="nav.exportTitle">⬇️</button>
             <button id="pageViewBtn" title="Modal pagine" data-i18n-title="nav.pageViewTitle">📖</button>
             <button id="tourBtn" title="Guida passo passo" data-i18n-title="guide.buttonTitle">❔</button>
@@ -2223,6 +2799,8 @@
                 </div>
                 <button class="font-btn" id="agentsFontDecrease">A-</button>
                 <button class="font-btn" id="agentsFontIncrease">A+</button>
+                <button class="nav-btn tts-global-btn" id="agentsTtsGlobalBtn" title="Leggi tutta la chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+                <button class="nav-btn" id="agentsTtsStopBtn" title="Ferma lettura" style="display:none">&#x23F9;</button>
                 <button class="nav-btn" id="agentsPageViewBtn" title="Modal pagine" data-i18n-title="nav.pageViewTitle">&#x1F4D6;</button>
                 <button class="nav-btn" id="agentsExportBtn" title="Export" data-i18n-title="nav.exportTitle">&#x2B07;&#xFE0F;</button>
                 <button class="nav-btn" id="agentsNewSessionBtn" title="Nuova sessione" data-i18n-title="agents.newSessionTitle">&#x1F4AC;</button>
@@ -2336,10 +2914,8 @@
             </div>
         </div>
     </div>
+`;
 
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
-    <script>
         function renderMarkdown(content) {
             const safeContent = content ?? '';
             const html = typeof marked !== 'undefined'
@@ -3279,6 +3855,412 @@ RULES:
             }
         }
 
+        // ===== TTS READER =====
+        const _ttsPlayIcon = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="8 5 19 12 8 19 8 5"/></svg>';
+        const _ttsPauseIcon = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="5" width="3" height="14" rx="1"/><rect x="14" y="5" width="3" height="14" rx="1"/></svg>';
+        const _ttsStopIcon = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+        const _ttsSpeakerIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+
+        class TTSReader {
+            constructor() {
+                this._engine = null;
+                this._playing = false;
+                this._blockIndex = -1;
+                this._blocks = [];
+                this._jumpRequested = false;
+                this._paused = false;
+                this._pauseResolve = null;
+                this._callToken = 0;
+                this._aborted = false;
+                this._scope = null; // 'message' | 'global'
+            }
+
+            _ensureEngine() {
+                if (this._engine) return this._engine;
+                this._engine = document.createElement('cartia-tts');
+                this._engine.style.display = 'none';
+                (_root.host || document.body).appendChild(this._engine);
+                return this._engine;
+            }
+
+            // --- Collect readable blocks ---
+
+            _collectBlocks(container) {
+                const blocks = [];
+                const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, {
+                    acceptNode: (node) => {
+                        if (node.matches('p, h1, h2, h3, h4, h5, h6, li, blockquote')) {
+                            if (node.closest('.message-content') || node.closest('.agent-response-content')) {
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                        }
+                        if (node.classList && node.classList.contains('message-content')) {
+                            const parent = node.closest('.message');
+                            if (parent && parent.classList.contains('user')) {
+                                const sub = node.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote');
+                                if (sub.length === 0 && node.textContent.trim()) {
+                                    return NodeFilter.FILTER_ACCEPT;
+                                }
+                            }
+                        }
+                        return NodeFilter.FILTER_SKIP;
+                    }
+                });
+                let n;
+                while (n = walker.nextNode()) blocks.push(n);
+                return blocks;
+            }
+
+            _getBlockText(block) {
+                const clone = block.cloneNode(true);
+                clone.querySelectorAll('.tts-block-btn').forEach(b => b.remove());
+                return clone.textContent.trim();
+            }
+
+            // --- Decorate message content with inline play buttons ---
+
+            decorateContent(contentDiv) {
+                const blocks = contentDiv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote');
+                blocks.forEach((block) => {
+                    if (block.querySelector('.tts-block-btn')) return;
+                    const btn = document.createElement('button');
+                    btn.className = 'tts-block-btn';
+                    btn.innerHTML = _ttsPlayIcon;
+                    btn.title = 'Ascolta da qui';
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this._onBlockClick(block, contentDiv);
+                    });
+                    block.appendChild(btn);
+                });
+            }
+
+            // --- Add per-message play button ---
+
+            addMessagePlayBtn(messageDiv, contentDiv) {
+                const roleDiv = messageDiv.querySelector('.message-role') || messageDiv.querySelector('.agent-response-name');
+                if (!roleDiv || roleDiv.querySelector('.tts-msg-btn')) return;
+
+                const btn = document.createElement('button');
+                btn.className = 'tts-block-btn tts-msg-btn';
+                btn.innerHTML = _ttsSpeakerIcon;
+                btn.title = 'Ascolta messaggio';
+                btn.style.marginLeft = '8px';
+                btn.style.verticalAlign = 'middle';
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._startMessageRead(messageDiv, contentDiv, 0);
+                });
+                roleDiv.appendChild(btn);
+            }
+
+            // --- Click on inline paragraph button: read from here to end of message ---
+
+            _onBlockClick(block, contentDiv) {
+                // If already playing this block, toggle pause
+                if (this._playing && this._blocks[this._blockIndex] === block) {
+                    this.togglePause();
+                    return;
+                }
+
+                // Find the message div that contains this content
+                const messageDiv = contentDiv.closest('.message') || contentDiv.closest('.agent-response-item');
+
+                // Collect blocks within this message
+                const container = messageDiv || contentDiv;
+                const blocks = this._collectBlocks(container);
+                const startIdx = blocks.indexOf(block);
+
+                if (startIdx < 0 || blocks.length === 0) return;
+
+                this._startRead(blocks, startIdx, 'message');
+            }
+
+            // --- Start reading entire message from index ---
+
+            _startMessageRead(messageDiv, contentDiv, startIdx) {
+                if (this._playing) {
+                    // If already reading this message, toggle pause
+                    if (this._scope === 'message') {
+                        this.togglePause();
+                        return;
+                    }
+                    this.stopAll();
+                }
+
+                const blocks = this._collectBlocks(messageDiv);
+                if (blocks.length === 0) {
+                    // Fallback: read plain text
+                    const text = this._getBlockText(contentDiv);
+                    if (text) {
+                        this._ensureEngine().speak(text);
+                    }
+                    return;
+                }
+
+                this._startRead(blocks, startIdx, 'message');
+            }
+
+            // --- Start reading entire chat ---
+
+            startSequential(containerId) {
+                this.stopAll();
+                const container = _root.getElementById(containerId);
+                if (!container) return;
+
+                const blocks = this._collectBlocks(container);
+                if (blocks.length === 0) return;
+
+                this._startRead(blocks, 0, 'global');
+            }
+
+            // --- Core sequential read engine ---
+
+            _startRead(blocks, startIdx, scope) {
+                this.stopAll();
+                this._blocks = blocks;
+                this._blockIndex = startIdx;
+                this._scope = scope;
+                this._aborted = false;
+                this._playing = true;
+                this._paused = false;
+
+                if (scope === 'global') {
+                    this._updateGlobalBtn(true);
+                }
+                this._updateMsgBtn(true);
+                this._runSequential();
+            }
+
+            async _runSequential() {
+                const engine = this._ensureEngine();
+                const token = ++this._callToken;
+
+                while (this._blockIndex < this._blocks.length && !this._aborted) {
+                    if (token !== this._callToken) return;
+
+                    // Pause gate
+                    if (this._paused) {
+                        await new Promise(resolve => { this._pauseResolve = resolve; });
+                        if (this._aborted || token !== this._callToken) return;
+                    }
+
+                    if (this._jumpRequested) {
+                        this._jumpRequested = false;
+                        continue;
+                    }
+
+                    const block = this._blocks[this._blockIndex];
+                    const text = this._getBlockText(block);
+
+                    if (!text) {
+                        this._blockIndex++;
+                        continue;
+                    }
+
+                    // Highlight & scroll
+                    this._clearHighlight();
+                    block.classList.add('tts-reading-highlight');
+                    this._currentHighlight = block;
+                    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    // Update inline btn if present
+                    const inlineBtn = block.querySelector('.tts-block-btn');
+                    if (inlineBtn) {
+                        inlineBtn.classList.add('tts-active');
+                        inlineBtn.innerHTML = _ttsPauseIcon;
+                    }
+
+                    // Speak and wait
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const onEnd = () => {
+                                engine.removeEventListener('tts-end', onEnd);
+                                engine.removeEventListener('tts-error', onErr);
+                                resolve();
+                            };
+                            const onErr = () => {
+                                engine.removeEventListener('tts-end', onEnd);
+                                engine.removeEventListener('tts-error', onErr);
+                                reject(new Error('tts-error'));
+                            };
+                            engine.addEventListener('tts-end', onEnd);
+                            engine.addEventListener('tts-error', onErr);
+                            engine.speak(text);
+                        });
+                    } catch {
+                        // On error, skip block
+                    }
+
+                    // Reset inline btn
+                    if (inlineBtn) {
+                        inlineBtn.classList.remove('tts-active');
+                        inlineBtn.innerHTML = _ttsPlayIcon;
+                    }
+
+                    if (!this._jumpRequested) {
+                        this._blockIndex++;
+                    }
+                }
+
+                // Done
+                this._finishRead();
+            }
+
+            _finishRead() {
+                this._clearHighlight();
+                this._resetAllBlockBtns();
+                this._playing = false;
+                this._paused = false;
+                this._scope = null;
+                this._updateGlobalBtn(false);
+                this._updateMsgBtn(false);
+            }
+
+            togglePause() {
+                if (!this._playing) return;
+                if (this._paused) {
+                    this._paused = false;
+                    if (this._pauseResolve) {
+                        this._pauseResolve();
+                        this._pauseResolve = null;
+                    }
+                } else {
+                    this._paused = true;
+                    this._ensureEngine().stop();
+                }
+                this._updateGlobalBtn(true);
+                this._updateMsgBtn(true);
+            }
+
+            skipNext() {
+                if (!this._playing) return;
+                if (this._blockIndex < this._blocks.length - 1) {
+                    this._blockIndex++;
+                    this._jumpRequested = true;
+                    this._ensureEngine().stop();
+                    if (this._paused) {
+                        this._paused = false;
+                        if (this._pauseResolve) { this._pauseResolve(); this._pauseResolve = null; }
+                    }
+                }
+            }
+
+            skipPrev() {
+                if (!this._playing) return;
+                if (this._blockIndex > 0) {
+                    this._blockIndex--;
+                    this._jumpRequested = true;
+                    this._ensureEngine().stop();
+                    if (this._paused) {
+                        this._paused = false;
+                        if (this._pauseResolve) { this._pauseResolve(); this._pauseResolve = null; }
+                    }
+                }
+            }
+
+            stopAll() {
+                this._aborted = true;
+                this._callToken++;
+                if (this._engine) this._engine.stop();
+                if (this._pauseResolve) { this._pauseResolve(); this._pauseResolve = null; }
+                this._playing = false;
+                this._paused = false;
+                this._scope = null;
+                this._clearHighlight();
+                this._resetAllBlockBtns();
+                this._updateGlobalBtn(false);
+                this._updateMsgBtn(false);
+            }
+
+            get isPlaying() { return this._playing; }
+            get isPaused() { return this._paused; }
+
+            // --- UI helpers ---
+
+            _clearHighlight() {
+                if (this._currentHighlight) {
+                    this._currentHighlight.classList.remove('tts-reading-highlight');
+                    this._currentHighlight = null;
+                }
+                _root.querySelectorAll('.tts-reading-highlight').forEach(el => {
+                    el.classList.remove('tts-reading-highlight');
+                });
+            }
+
+            _resetAllBlockBtns() {
+                _root.querySelectorAll('.tts-block-btn.tts-active').forEach(btn => {
+                    btn.classList.remove('tts-active');
+                    btn.innerHTML = _ttsPlayIcon;
+                });
+            }
+
+            _updateMsgBtn(playing) {
+                // Update all message-level buttons
+                _root.querySelectorAll('.tts-msg-btn').forEach(btn => {
+                    if (playing && !this._paused) {
+                        // Find if this btn's message contains the current block
+                        const msgDiv = btn.closest('.message') || btn.closest('.agent-response-item');
+                        if (msgDiv && this._blocks[this._blockIndex] && msgDiv.contains(this._blocks[this._blockIndex])) {
+                            btn.classList.add('tts-active');
+                            btn.innerHTML = _ttsPauseIcon;
+                        } else {
+                            btn.classList.remove('tts-active');
+                            btn.innerHTML = _ttsSpeakerIcon;
+                        }
+                    } else if (playing && this._paused) {
+                        const msgDiv = btn.closest('.message') || btn.closest('.agent-response-item');
+                        if (msgDiv && this._blocks[this._blockIndex] && msgDiv.contains(this._blocks[this._blockIndex])) {
+                            btn.classList.add('tts-active');
+                            btn.innerHTML = _ttsPlayIcon;
+                        } else {
+                            btn.classList.remove('tts-active');
+                            btn.innerHTML = _ttsSpeakerIcon;
+                        }
+                    } else {
+                        btn.classList.remove('tts-active');
+                        btn.innerHTML = _ttsSpeakerIcon;
+                    }
+                });
+            }
+
+            _updateGlobalBtn(playing) {
+                const pairs = [
+                    ['ttsGlobalBtn', 'ttsStopBtn'],
+                    ['agentsTtsGlobalBtn', 'agentsTtsStopBtn']
+                ];
+                pairs.forEach(([id, stopId]) => {
+                    const btn = _root.getElementById(id);
+                    const stopBtn = _root.getElementById(stopId);
+                    if (!btn) return;
+                    if (playing && !this._paused) {
+                        btn.classList.add('tts-playing');
+                        btn.innerHTML = _ttsPauseIcon;
+                        btn.title = 'Pausa lettura';
+                        if (stopBtn) stopBtn.style.display = '';
+                    } else if (playing && this._paused) {
+                        btn.classList.add('tts-playing');
+                        btn.innerHTML = _ttsPlayIcon;
+                        btn.title = 'Riprendi lettura';
+                        if (stopBtn) stopBtn.style.display = '';
+                    } else {
+                        btn.classList.remove('tts-playing');
+                        btn.innerHTML = _ttsSpeakerIcon;
+                        btn.title = 'Leggi tutta la chat';
+                        if (stopBtn) stopBtn.style.display = 'none';
+                    }
+                });
+            }
+        }
+
+        const ttsReader = new TTSReader();
+
+        // Stop TTS on page hide/unload
+        window.addEventListener('beforeunload', () => ttsReader.stopAll());
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) ttsReader.stopAll();
+        });
+
         // ===== CHAT UI CLASS =====
         class ChatUI {
             constructor(translator) {
@@ -3319,6 +4301,12 @@ RULES:
                 div.appendChild(roleDiv);
                 div.appendChild(contentDiv);
 
+                // TTS: per-message play button + inline paragraph buttons
+                if (message.role === 'assistant' && message.content) {
+                    ttsReader.addMessagePlayBtn(div, contentDiv);
+                    ttsReader.decorateContent(contentDiv);
+                }
+
                 // Preview button for code blocks
                 if (message.role === 'assistant' && hasPreviewableCode(message.content)) {
                     const previewBtn = document.createElement('button');
@@ -3345,7 +4333,7 @@ RULES:
             }
 
             renderMessages(messages) {
-                const container = document.getElementById('messages');
+                const container = _root.getElementById('messages');
                 container.innerHTML = '';
 
                 if (messages.length === 0) {
@@ -3368,7 +4356,7 @@ RULES:
             }
 
             updateLastMessage(content) {
-                const container = document.getElementById('messages');
+                const container = _root.getElementById('messages');
                 const lastMsg = container.lastElementChild;
 
                 if (lastMsg && lastMsg.classList.contains('assistant')) {
@@ -3383,13 +4371,13 @@ RULES:
 
             scrollToBottom() {
                 if (this.autoScroll) {
-                    const container = document.getElementById('messagesContainer');
+                    const container = _root.getElementById('messagesContainer');
                     container.scrollTop = container.scrollHeight;
                 }
             }
 
             scrollToMessage(index) {
-                const messages = document.querySelectorAll('.message');
+                const messages = _root.querySelectorAll('.message');
                 if (index >= 0 && index < messages.length) {
                     this.currentMessageIndex = index;
                     const message = messages[index];
@@ -3399,7 +4387,7 @@ RULES:
             }
 
             prevMessage() {
-                const messages = document.querySelectorAll('.message');
+                const messages = _root.querySelectorAll('.message');
                 if (messages.length === 0) return;
 
                 if (this.currentMessageIndex <= 0) {
@@ -3411,7 +4399,7 @@ RULES:
             }
 
             nextMessage() {
-                const messages = document.querySelectorAll('.message');
+                const messages = _root.querySelectorAll('.message');
                 if (messages.length === 0) return;
 
                 if (this.currentMessageIndex >= messages.length - 1) {
@@ -3423,9 +4411,9 @@ RULES:
             }
 
             updateNavButtons() {
-                const messages = document.querySelectorAll('.message');
-                const prevBtn = document.getElementById('prevMsg');
-                const nextBtn = document.getElementById('nextMsg');
+                const messages = _root.querySelectorAll('.message');
+                const prevBtn = _root.getElementById('prevMsg');
+                const nextBtn = _root.getElementById('nextMsg');
 
                 if (prevBtn && nextBtn) {
                     prevBtn.disabled = this.currentMessageIndex <= 0;
@@ -3437,7 +4425,7 @@ RULES:
                 this.autoScroll = !this.autoScroll;
                 localStorage.setItem('autoScroll_online', this.autoScroll.toString());
 
-                const btn = document.getElementById('autoScrollToggle');
+                const btn = _root.getElementById('autoScrollToggle');
                 if (btn) {
                     if (this.autoScroll) {
                         btn.classList.add('active');
@@ -3455,7 +4443,7 @@ RULES:
                     this.autoScroll = saved === 'true';
                 }
 
-                const btn = document.getElementById('autoScrollToggle');
+                const btn = _root.getElementById('autoScrollToggle');
                 if (btn && this.autoScroll) {
                     btn.classList.add('active');
                     btn.title = 'Auto-scroll: ON';
@@ -3479,7 +4467,7 @@ RULES:
             }
 
             applyFontSize() {
-                document.body.style.fontSize = this.fontSize + 'px';
+                _host.style.fontSize = this.fontSize + 'px';
                 localStorage.setItem('fontSize_online', this.fontSize.toString());
             }
 
@@ -3555,11 +4543,11 @@ RULES:
             }
 
             setupLanguageToggle() {
-                const btn = document.getElementById('langToggle');
+                const btn = _root.getElementById('langToggle');
                 if (!btn) return;
                 btn.addEventListener('click', () => this.toggleLanguage());
-                const setupEn = document.getElementById('setupLangEn');
-                const setupIt = document.getElementById('setupLangIt');
+                const setupEn = _root.getElementById('setupLangEn');
+                const setupIt = _root.getElementById('setupLangIt');
                 if (setupEn) {
                     setupEn.addEventListener('click', () => this.setLanguage('en'));
                 }
@@ -3571,12 +4559,12 @@ RULES:
 
             updateLanguageControls() {
                 const label = this.lang.toUpperCase();
-                const btn = document.getElementById('langToggle');
+                const btn = _root.getElementById('langToggle');
                 if (btn) btn.textContent = label;
-                const agentsBtn = document.getElementById('agentsLangToggle');
+                const agentsBtn = _root.getElementById('agentsLangToggle');
                 if (agentsBtn) agentsBtn.textContent = label;
-                const setupEn = document.getElementById('setupLangEn');
-                const setupIt = document.getElementById('setupLangIt');
+                const setupEn = _root.getElementById('setupLangEn');
+                const setupIt = _root.getElementById('setupLangIt');
                 if (setupEn) setupEn.classList.toggle('active', this.lang === 'en');
                 if (setupIt) setupIt.classList.toggle('active', this.lang === 'it');
             }
@@ -3601,7 +4589,7 @@ RULES:
                     this.renderAgentsCards();
                     this.renderAgentsMessages();
                 }
-                if (document.getElementById('pageModal').classList.contains('active')) {
+                if (_root.getElementById('pageModal').classList.contains('active')) {
                     this.rebuildPageViewPreservingMessage();
                 }
             }
@@ -3609,23 +4597,23 @@ RULES:
             applyTranslations() {
                 document.title = this.t('docTitle');
 
-                document.querySelectorAll('[data-i18n]').forEach((el) => {
+                _root.querySelectorAll('[data-i18n]').forEach((el) => {
                     el.textContent = this.t(el.getAttribute('data-i18n'));
                 });
 
-                document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+                _root.querySelectorAll('[data-i18n-html]').forEach((el) => {
                     el.innerHTML = this.t(el.getAttribute('data-i18n-html'));
                 });
 
-                document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+                _root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
                     el.setAttribute('placeholder', this.t(el.getAttribute('data-i18n-placeholder')));
                 });
 
-                document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+                _root.querySelectorAll('[data-i18n-title]').forEach((el) => {
                     el.setAttribute('title', this.t(el.getAttribute('data-i18n-title')));
                 });
 
-                document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
+                _root.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
                     el.setAttribute('aria-label', this.t(el.getAttribute('data-i18n-aria-label')));
                 });
 
@@ -3636,8 +4624,8 @@ RULES:
             setupApiKeyScreen() {
                 this.prefillApiKeyFromUrl();
 
-                document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
-                    const input = document.getElementById('apiKeyInput');
+                _root.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+                    const input = _root.getElementById('apiKeyInput');
                     const key = input.value.trim();
                     if (key) {
                         this.apiKeyManager.setApiKey(key);
@@ -3648,38 +4636,38 @@ RULES:
                     }
                 });
 
-                document.getElementById('apiKeyInput').addEventListener('keydown', (e) => {
+                _root.getElementById('apiKeyInput').addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
-                        document.getElementById('saveApiKeyBtn').click();
+                        _root.getElementById('saveApiKeyBtn').click();
                     }
                 });
 
                 // Setup screen UI listeners (registered once)
-                document.getElementById('setupCredit').addEventListener('click', () => {
+                _root.getElementById('setupCredit').addEventListener('click', () => {
                     this.updateCreditDisplay();
                 });
 
-                document.getElementById('setupCloseBtn').addEventListener('click', () => {
+                _root.getElementById('setupCloseBtn').addEventListener('click', () => {
                     this.hideSetupOverlay();
                 });
 
-                document.getElementById('setupHideBtn').addEventListener('click', () => {
+                _root.getElementById('setupHideBtn').addEventListener('click', () => {
                     this.hideSetupOverlay();
                 });
 
-                document.getElementById('setupTourBtn').addEventListener('click', () => {
+                _root.getElementById('setupTourBtn').addEventListener('click', () => {
                     this.startTourFromOverlay();
                 });
 
-                document.getElementById('demoBannerBtn').addEventListener('click', () => {
+                _root.getElementById('demoBannerBtn').addEventListener('click', () => {
                     this.showSetupOverlay();
                 });
 
-                document.getElementById('demoTourBtn').addEventListener('click', () => {
+                _root.getElementById('demoTourBtn').addEventListener('click', () => {
                     this.startTour();
                 });
 
-                document.getElementById('guideCloseBtn').addEventListener('click', () => {
+                _root.getElementById('guideCloseBtn').addEventListener('click', () => {
                     this.closeGuide();
                 });
             }
@@ -3688,7 +4676,7 @@ RULES:
                 const urlParams = new URLSearchParams(window.location.search);
                 const apiKey = urlParams.get('key');
                 if (apiKey) {
-                    document.getElementById('apiKeyInput').value = apiKey;
+                    _root.getElementById('apiKeyInput').value = apiKey;
                 }
             }
 
@@ -3704,14 +4692,14 @@ RULES:
             }
 
             showSetupScreen() {
-                document.getElementById('app').classList.add('active');
+                _root.getElementById('app').classList.add('active');
                 this.setDemoMode(true);
                 this.showSetupOverlay();
                 this.updateCreditDisplay();
             }
 
             showApp() {
-                document.getElementById('app').classList.add('active');
+                _root.getElementById('app').classList.add('active');
                 this.setDemoMode(false);
                 this.hideSetupOverlay();
 
@@ -3747,24 +4735,24 @@ RULES:
             }
 
             showSetupOverlay() {
-                const overlay = document.getElementById('setupScreen');
+                const overlay = _root.getElementById('setupScreen');
                 overlay.classList.add('active');
                 overlay.setAttribute('aria-hidden', 'false');
                 overlay.removeAttribute('inert');
             }
 
             hideSetupOverlay() {
-                const overlay = document.getElementById('setupScreen');
+                const overlay = _root.getElementById('setupScreen');
                 overlay.classList.remove('active');
                 overlay.setAttribute('aria-hidden', 'true');
                 overlay.setAttribute('inert', '');
 
-                const active = document.activeElement;
+                const active = _root.activeElement;
                 if (active && overlay.contains(active)) {
                     const fallback =
-                        document.getElementById('demoBannerBtn') ||
-                        document.getElementById('apiKeyBtn') ||
-                        document.getElementById('messageInput');
+                        _root.getElementById('demoBannerBtn') ||
+                        _root.getElementById('apiKeyBtn') ||
+                        _root.getElementById('messageInput');
                     if (fallback) {
                         fallback.focus();
                     } else {
@@ -3774,15 +4762,15 @@ RULES:
             }
 
             setDemoMode(enabled) {
-                const banner = document.getElementById('demoBanner');
+                const banner = _root.getElementById('demoBanner');
                 banner.classList.toggle('active', enabled);
 
                 const inputs = [
-                    document.getElementById('messageInput'),
-                    document.getElementById('sendBtn'),
-                    document.getElementById('systemPrompt'),
-                    document.getElementById('contextPrompt'),
-                    document.getElementById('examplesPrompt')
+                    _root.getElementById('messageInput'),
+                    _root.getElementById('sendBtn'),
+                    _root.getElementById('systemPrompt'),
+                    _root.getElementById('contextPrompt'),
+                    _root.getElementById('examplesPrompt')
                 ];
                 inputs.forEach((el) => {
                     if (el) el.disabled = enabled;
@@ -3791,7 +4779,7 @@ RULES:
 
             setupEventListeners() {
                 // Send button
-                document.getElementById('sendBtn').addEventListener('click', () => {
+                _root.getElementById('sendBtn').addEventListener('click', () => {
                     if (this.activeTab === 'agents') {
                         this.sendAgentsMessage();
                     } else {
@@ -3800,7 +4788,7 @@ RULES:
                 });
 
                 // Enter key
-                document.getElementById('messageInput').addEventListener('keydown', (e) => {
+                _root.getElementById('messageInput').addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         if (this.activeTab === 'agents') {
@@ -3812,16 +4800,16 @@ RULES:
                 });
 
                 // New chat button
-                document.getElementById('newChatBtn').addEventListener('click', () => this.startNewChat());
-                document.getElementById('cloneChatBtn').addEventListener('click', () => this.cloneChat());
-                document.getElementById('newAgentsSessionBtn').addEventListener('click', () => this.startNewAgentsSession());
-                document.getElementById('clearAgentsBtn').addEventListener('click', () => this.clearAgentsAll());
-                document.getElementById('homeBtn').addEventListener('click', () => {
+                _root.getElementById('newChatBtn').addEventListener('click', () => this.startNewChat());
+                _root.getElementById('cloneChatBtn').addEventListener('click', () => this.cloneChat());
+                _root.getElementById('newAgentsSessionBtn').addEventListener('click', () => this.startNewAgentsSession());
+                _root.getElementById('clearAgentsBtn').addEventListener('click', () => this.clearAgentsAll());
+                _root.getElementById('homeBtn').addEventListener('click', () => {
                     window.location.href = '/';
                 });
 
                 // API Key button
-                document.getElementById('apiKeyBtn').addEventListener('click', () => {
+                _root.getElementById('apiKeyBtn').addEventListener('click', () => {
                     if (!this.apiKeyManager.hasApiKey()) {
                         this.showSetupOverlay();
                         return;
@@ -3833,76 +4821,91 @@ RULES:
                 });
 
                 // Credit display (click to refresh)
-                document.getElementById('creditDisplay').addEventListener('click', () => {
+                _root.getElementById('creditDisplay').addEventListener('click', () => {
                     this.updateCreditDisplay();
                 });
 
                 // Model selector
-                document.getElementById('modelSelector').addEventListener('change', (e) => {
+                _root.getElementById('modelSelector').addEventListener('change', (e) => {
                     this.modelSelector.selectModel(e.target.value);
                     this.updateReasoningAvailability();
                 });
 
                 // Font size controls
-                document.getElementById('fontIncrease').addEventListener('click', () => {
+                _root.getElementById('fontIncrease').addEventListener('click', () => {
                     this.chatUI.increaseFontSize();
                 });
-                document.getElementById('fontDecrease').addEventListener('click', () => {
+                _root.getElementById('fontDecrease').addEventListener('click', () => {
                     this.chatUI.decreaseFontSize();
                 });
 
                 // Navigation controls
-                document.getElementById('prevMsg').addEventListener('click', () => {
+                _root.getElementById('prevMsg').addEventListener('click', () => {
                     this.chatUI.prevMessage();
                 });
-                document.getElementById('nextMsg').addEventListener('click', () => {
+                _root.getElementById('nextMsg').addEventListener('click', () => {
                     this.chatUI.nextMessage();
                 });
 
                 // Auto-scroll toggle
-                document.getElementById('autoScrollToggle').addEventListener('click', () => {
+                _root.getElementById('autoScrollToggle').addEventListener('click', () => {
                     this.chatUI.toggleAutoScroll();
                 });
 
                 // Export button
-                document.getElementById('exportBtn').addEventListener('click', () => {
+                _root.getElementById('exportBtn').addEventListener('click', () => {
                     this.exportChat();
                 });
 
                 // History button
-                document.getElementById('historyBtn').addEventListener('click', () => {
+                _root.getElementById('historyBtn').addEventListener('click', () => {
                     this.showHistory();
                 });
 
                 // Tour button
-                document.getElementById('tourBtn').addEventListener('click', () => {
+                _root.getElementById('tourBtn').addEventListener('click', () => {
                     this.startTour();
                 });
 
                 // Page view button
-                document.getElementById('pageViewBtn').addEventListener('click', () => {
+                _root.getElementById('pageViewBtn').addEventListener('click', () => {
                     this.showPageView();
                 });
 
-                document.getElementById('pagePrevBtn').addEventListener('click', () => {
+                _root.getElementById('pagePrevBtn').addEventListener('click', () => {
                     this.changePageView(-1);
                 });
 
-                document.getElementById('pageNextBtn').addEventListener('click', () => {
+                _root.getElementById('pageNextBtn').addEventListener('click', () => {
                     this.changePageView(1);
                 });
 
-                document.getElementById('pageFontIncrease').addEventListener('click', () => {
+                _root.getElementById('pageFontIncrease').addEventListener('click', () => {
                     this.increasePageFontSize();
                 });
 
-                document.getElementById('pageFontDecrease').addEventListener('click', () => {
+                _root.getElementById('pageFontDecrease').addEventListener('click', () => {
                     this.decreasePageFontSize();
+                });
+
+                // TTS global controls (chat)
+                _root.getElementById('ttsGlobalBtn').addEventListener('click', () => {
+                    if (ttsReader.isPlaying) {
+                        ttsReader.togglePause();
+                    } else {
+                        ttsReader.startSequential('messages');
+                    }
+                    const stopBtn = _root.getElementById('ttsStopBtn');
+                    stopBtn.style.display = ttsReader.isPlaying ? '' : 'none';
+                });
+                _root.getElementById('ttsStopBtn').addEventListener('click', () => {
+                    ttsReader.stopAll();
+                    _root.getElementById('ttsStopBtn').style.display = 'none';
                 });
 
                 // Datetime anchor toggle
                 this.datetimeAnchor = localStorage.getItem('chat_datetime_anchor') === 'true';
-                const dtBtn = document.getElementById('datetimeToggle');
+                const dtBtn = _root.getElementById('datetimeToggle');
                 if (this.datetimeAnchor) dtBtn.classList.add('active');
                 dtBtn.addEventListener('click', () => {
                     this.datetimeAnchor = !this.datetimeAnchor;
@@ -3912,17 +4915,17 @@ RULES:
                 });
 
                 // Reasoning toggle
-                document.getElementById('reasoningToggle').addEventListener('click', () => {
+                _root.getElementById('reasoningToggle').addEventListener('click', () => {
                     if (!this.isReasoningSupported()) return;
                     const enabled = !this.getReasoningEnabled();
                     this.setReasoningEnabled(enabled);
                 });
-                document.getElementById('reasoningToggle').addEventListener('contextmenu', (e) => {
+                _root.getElementById('reasoningToggle').addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     this.cycleReasoningEffort();
                 });
 
-                document.addEventListener('keydown', (e) => {
+                _root.addEventListener('keydown', (e) => {
                     if (e.altKey && e.shiftKey && e.key.toLowerCase() === 'r') {
                         this.cycleReasoningEffort();
                     }
@@ -3932,11 +4935,11 @@ RULES:
             }
 
             setupPromptToggle() {
-                const btn = document.getElementById('promptToggle');
+                const btn = _root.getElementById('promptToggle');
                 if (!btn) return;
 
                 const applyState = (collapsed) => {
-                    document.body.classList.toggle('prompt-collapsed', collapsed);
+                    _host.classList.toggle('prompt-collapsed', collapsed);
                     btn.setAttribute('aria-expanded', (!collapsed).toString());
                     localStorage.setItem('promptCollapsed_online', collapsed ? 'true' : 'false');
                     this.applyPromptToggleLanguage();
@@ -3948,25 +4951,25 @@ RULES:
                 }
 
                 btn.addEventListener('click', () => {
-                    const collapsed = !document.body.classList.contains('prompt-collapsed');
+                    const collapsed = !_host.classList.contains('prompt-collapsed');
                     applyState(collapsed);
                 });
             }
 
             applyPromptToggleLanguage() {
-                const btn = document.getElementById('promptToggle');
+                const btn = _root.getElementById('promptToggle');
                 if (!btn) return;
-                const collapsed = document.body.classList.contains('prompt-collapsed');
+                const collapsed = _host.classList.contains('prompt-collapsed');
                 btn.textContent = collapsed ? this.t('floating.promptToggleCollapsed') : this.t('floating.promptToggle');
                 btn.title = collapsed ? this.t('floating.promptToggleShow') : this.t('floating.promptToggleTitle');
             }
 
             setupBottomToggle() {
-                const btn = document.getElementById('bottomToggle');
+                const btn = _root.getElementById('bottomToggle');
                 if (!btn) return;
 
                 const applyState = (collapsed) => {
-                    document.body.classList.toggle('bottom-collapsed', collapsed);
+                    _host.classList.toggle('bottom-collapsed', collapsed);
                     btn.setAttribute('aria-expanded', (!collapsed).toString());
                     localStorage.setItem('bottomCollapsed_online', collapsed ? 'true' : 'false');
                     this.applyBottomToggleLanguage();
@@ -3978,21 +4981,21 @@ RULES:
                 }
 
                 btn.addEventListener('click', () => {
-                    const collapsed = !document.body.classList.contains('bottom-collapsed');
+                    const collapsed = !_host.classList.contains('bottom-collapsed');
                     applyState(collapsed);
                 });
             }
 
             applyBottomToggleLanguage() {
-                const btn = document.getElementById('bottomToggle');
+                const btn = _root.getElementById('bottomToggle');
                 if (!btn) return;
-                const collapsed = document.body.classList.contains('bottom-collapsed');
+                const collapsed = _host.classList.contains('bottom-collapsed');
                 btn.textContent = collapsed ? this.t('floating.bottomToggleCollapsed') : this.t('floating.bottomToggleExpanded');
                 btn.title = collapsed ? this.t('floating.bottomToggleShow') : this.t('floating.bottomToggleTitle');
             }
 
             populateModelSelector() {
-                const select = document.getElementById('modelSelector');
+                const select = _root.getElementById('modelSelector');
                 select.innerHTML = '';
 
                 this.modelSelector.getModels().forEach(model => {
@@ -4009,7 +5012,7 @@ RULES:
                 this.conversationManager.saveConversation();
                 this.conversationManager.newConversation();
                 this.chatUI.renderMessages([]);
-                document.getElementById('messageInput').value = '';
+                _root.getElementById('messageInput').value = '';
                 this.applyPromptFields({
                     systemPrompt: '',
                     contextPrompt: '',
@@ -4022,8 +5025,8 @@ RULES:
                     this.agentsManager.saveCurrentSession();
                     this.agentsManager.currentSession = null;
                 }
-                document.getElementById('agentsMessages').innerHTML = '';
-                document.getElementById('messageInput').value = '';
+                _root.getElementById('agentsMessages').innerHTML = '';
+                _root.getElementById('messageInput').value = '';
             }
 
             clearAgentsAll() {
@@ -4031,10 +5034,10 @@ RULES:
                     this.agentsManager.saveCurrentSession();
                     this.agentsManager.currentSession = null;
                 }
-                document.getElementById('agentsMessages').innerHTML = '';
-                document.getElementById('messageInput').value = '';
-                document.getElementById('agentsContext').value = '';
-                document.getElementById('agentsExamples').value = '';
+                _root.getElementById('agentsMessages').innerHTML = '';
+                _root.getElementById('messageInput').value = '';
+                _root.getElementById('agentsContext').value = '';
+                _root.getElementById('agentsExamples').value = '';
             }
 
             cloneChat() {
@@ -4042,20 +5045,20 @@ RULES:
                 const promptFields = this.getPromptFieldsFromInputs();
                 this.conversationManager.newConversation(promptFields);
                 this.chatUI.renderMessages([]);
-                document.getElementById('messageInput').value = '';
+                _root.getElementById('messageInput').value = '';
                 this.applyPromptFields(promptFields);
             }
 
             getPromptFieldsFromInputs() {
                 return {
-                    systemPrompt: document.getElementById('systemPrompt').value.trim(),
-                    contextPrompt: document.getElementById('contextPrompt').value.trim(),
-                    examplesPrompt: document.getElementById('examplesPrompt').value.trim()
+                    systemPrompt: _root.getElementById('systemPrompt').value.trim(),
+                    contextPrompt: _root.getElementById('contextPrompt').value.trim(),
+                    examplesPrompt: _root.getElementById('examplesPrompt').value.trim()
                 };
             }
 
             async sendMessage() {
-                const input = document.getElementById('messageInput');
+                const input = _root.getElementById('messageInput');
                 const content = input.value.trim();
 
                 if (!content) return;
@@ -4084,7 +5087,7 @@ RULES:
                 // Clear input and render
                 input.value = '';
                 this.chatUI.renderMessages(this.conversationManager.getCurrentMessages());
-                document.getElementById('sendBtn').disabled = true;
+                _root.getElementById('sendBtn').disabled = true;
 
                 // Send to API
                 const promptMessages = this.buildPromptMessages();
@@ -4107,7 +5110,7 @@ RULES:
 
                         // Re-render per mostrare il costo finale
                         this.chatUI.renderMessages(messages);
-                        document.getElementById('sendBtn').disabled = false;
+                        _root.getElementById('sendBtn').disabled = false;
 
                     },
                     (error) => {
@@ -4118,7 +5121,7 @@ RULES:
                         const messages = this.conversationManager.getCurrentMessages();
                         messages.pop();
                         this.chatUI.renderMessages(messages);
-                        document.getElementById('sendBtn').disabled = false;
+                        _root.getElementById('sendBtn').disabled = false;
                     }
                 );
             }
@@ -4137,7 +5140,7 @@ RULES:
             }
 
             applyReasoningState(enabled) {
-                const btn = document.getElementById('reasoningToggle');
+                const btn = _root.getElementById('reasoningToggle');
                 if (!btn) return;
                 btn.classList.toggle('active', enabled);
                 const effort = this.getReasoningEffort();
@@ -4145,7 +5148,7 @@ RULES:
             }
 
             updateReasoningAvailability() {
-                const btn = document.getElementById('reasoningToggle');
+                const btn = _root.getElementById('reasoningToggle');
                 if (!btn) return;
 
                 btn.classList.remove('hidden');
@@ -4184,7 +5187,7 @@ RULES:
             }
 
             showReasoningToast(level) {
-                const toast = document.getElementById('reasoningToast');
+                const toast = _root.getElementById('reasoningToast');
                 if (!toast) return;
                 toast.textContent = `Reasoning: ${level}`;
                 toast.classList.remove('hidden');
@@ -4207,7 +5210,7 @@ RULES:
             attachPromptListeners() {
                 const fields = ['systemPrompt', 'contextPrompt', 'examplesPrompt'];
                 fields.forEach((id) => {
-                    const el = document.getElementById(id);
+                    const el = _root.getElementById(id);
                     if (el) {
                         el.addEventListener('input', () => this.savePromptFields());
                     }
@@ -4216,9 +5219,9 @@ RULES:
 
             savePromptFields() {
                 const data = {
-                    systemPrompt: document.getElementById('systemPrompt').value.trim(),
-                    contextPrompt: document.getElementById('contextPrompt').value.trim(),
-                    examplesPrompt: document.getElementById('examplesPrompt').value.trim()
+                    systemPrompt: _root.getElementById('systemPrompt').value.trim(),
+                    contextPrompt: _root.getElementById('contextPrompt').value.trim(),
+                    examplesPrompt: _root.getElementById('examplesPrompt').value.trim()
                 };
                 if (this.conversationManager.currentConversation) {
                     this.conversationManager.currentConversation.promptFields = data;
@@ -4227,23 +5230,23 @@ RULES:
             }
 
             applyPromptFields(data) {
-                document.getElementById('systemPrompt').value = data.systemPrompt || '';
-                document.getElementById('contextPrompt').value = data.contextPrompt || '';
-                document.getElementById('examplesPrompt').value = data.examplesPrompt || '';
+                _root.getElementById('systemPrompt').value = data.systemPrompt || '';
+                _root.getElementById('contextPrompt').value = data.contextPrompt || '';
+                _root.getElementById('examplesPrompt').value = data.examplesPrompt || '';
                 if (this.conversationManager.currentConversation) {
                     this.conversationManager.currentConversation.promptFields = {
-                        systemPrompt: document.getElementById('systemPrompt').value.trim(),
-                        contextPrompt: document.getElementById('contextPrompt').value.trim(),
-                        examplesPrompt: document.getElementById('examplesPrompt').value.trim()
+                        systemPrompt: _root.getElementById('systemPrompt').value.trim(),
+                        contextPrompt: _root.getElementById('contextPrompt').value.trim(),
+                        examplesPrompt: _root.getElementById('examplesPrompt').value.trim()
                     };
                     this.conversationManager.saveConversation();
                 }
             }
 
             buildPromptMessages() {
-                const systemPrompt = document.getElementById('systemPrompt').value.trim();
-                const contextPrompt = document.getElementById('contextPrompt').value.trim();
-                const examplesPrompt = document.getElementById('examplesPrompt').value.trim();
+                const systemPrompt = _root.getElementById('systemPrompt').value.trim();
+                const contextPrompt = _root.getElementById('contextPrompt').value.trim();
+                const examplesPrompt = _root.getElementById('examplesPrompt').value.trim();
 
                 const sections = [];
                 if (this.datetimeAnchor) {
@@ -4267,9 +5270,9 @@ RULES:
             }
 
             showHistory() {
-                const historyList = document.getElementById('historyList');
+                const historyList = _root.getElementById('historyList');
                 historyList.innerHTML = '';
-                document.getElementById('historyModal').classList.add('active');
+                _root.getElementById('historyModal').classList.add('active');
 
                 const conversations = this.conversationManager.getAllConversations();
 
@@ -4309,7 +5312,7 @@ RULES:
             }
 
             closeHistory() {
-                document.getElementById('historyModal').classList.remove('active');
+                _root.getElementById('historyModal').classList.remove('active');
             }
 
             startTour() {
@@ -4376,14 +5379,14 @@ RULES:
             }
 
             openGuide(index) {
-                const overlay = document.getElementById('guideOverlay');
+                const overlay = _root.getElementById('guideOverlay');
                 overlay.classList.add('active');
                 overlay.setAttribute('aria-hidden', 'false');
                 this.renderGuideStep(index);
             }
 
             closeGuide() {
-                const overlay = document.getElementById('guideOverlay');
+                const overlay = _root.getElementById('guideOverlay');
                 overlay.classList.remove('active');
                 overlay.setAttribute('aria-hidden', 'true');
                 this.clearGuideHighlight();
@@ -4398,10 +5401,10 @@ RULES:
                 if (!this.guideSteps.length) return;
                 this.guideIndex = index;
                 const step = this.guideSteps[index];
-                const titleEl = document.getElementById('guideTitle');
-                const descEl = document.getElementById('guideDesc');
-                const prevBtn = document.getElementById('guidePrevBtn');
-                const nextBtn = document.getElementById('guideNextBtn');
+                const titleEl = _root.getElementById('guideTitle');
+                const descEl = _root.getElementById('guideDesc');
+                const prevBtn = _root.getElementById('guidePrevBtn');
+                const nextBtn = _root.getElementById('guideNextBtn');
 
                 titleEl.textContent = step.title;
                 descEl.textContent = step.description;
@@ -4426,7 +5429,7 @@ RULES:
 
             applyGuideHighlight(selector) {
                 this.clearGuideHighlight();
-                const el = document.querySelector(selector);
+                const el = _root.querySelector(selector);
                 if (!el) return;
                 el.classList.add('guide-highlight');
                 el.scrollIntoView({ behavior: 'auto', block: 'center' });
@@ -4441,7 +5444,7 @@ RULES:
             }
 
             showPageView() {
-                const modal = document.getElementById('pageModal');
+                const modal = _root.getElementById('pageModal');
                 modal.classList.add('active');
                 modal.setAttribute('aria-hidden', 'false');
                 requestAnimationFrame(() => {
@@ -4452,7 +5455,7 @@ RULES:
             }
 
             closePageView() {
-                const modal = document.getElementById('pageModal');
+                const modal = _root.getElementById('pageModal');
                 modal.classList.remove('active');
                 modal.setAttribute('aria-hidden', 'true');
             }
@@ -4467,14 +5470,14 @@ RULES:
                 if (this.pageMeasureEl) return this.pageMeasureEl;
                 const el = document.createElement('div');
                 el.className = 'page-body page-measure';
-                document.body.appendChild(el);
+                _root.appendChild(el);
                 this.pageMeasureEl = el;
                 this.applyPageFontSize();
                 return el;
             }
 
             applyPageFontSize() {
-                const pageBody = document.getElementById('pageBody');
+                const pageBody = _root.getElementById('pageBody');
                 if (pageBody) {
                     pageBody.style.fontSize = `${this.pageFontSize}px`;
                 }
@@ -4512,7 +5515,7 @@ RULES:
             }
 
             rebuildPageViewPreservingMessage() {
-                if (!document.getElementById('pageModal').classList.contains('active')) {
+                if (!_root.getElementById('pageModal').classList.contains('active')) {
                     return;
                 }
                 const currentPage = this.pageView.pages[this.pageView.index];
@@ -4525,7 +5528,7 @@ RULES:
 
             buildPageViewPages() {
                 const messages = this.conversationManager.getCurrentMessages();
-                const pageBody = document.getElementById('pageBody');
+                const pageBody = _root.getElementById('pageBody');
                 const measureEl = this.getPageMeasureElement();
                 const maxHeight = pageBody.clientHeight || 300;
                 const maxWidth = pageBody.clientWidth || 400;
@@ -4637,12 +5640,12 @@ RULES:
             }
 
             renderPageViewPage(index) {
-                const pageBody = document.getElementById('pageBody');
-                const meta = document.getElementById('pageMeta');
-                const extra = document.getElementById('pageExtra');
-                const counter = document.getElementById('pageCounter');
-                const prevBtn = document.getElementById('pagePrevBtn');
-                const nextBtn = document.getElementById('pageNextBtn');
+                const pageBody = _root.getElementById('pageBody');
+                const meta = _root.getElementById('pageMeta');
+                const extra = _root.getElementById('pageExtra');
+                const counter = _root.getElementById('pageCounter');
+                const prevBtn = _root.getElementById('pagePrevBtn');
+                const nextBtn = _root.getElementById('pageNextBtn');
 
                 if (!this.pageView.pages.length) {
                     pageBody.innerHTML = `<div class="page-empty">${this.t('chat.empty')}</div>`;
@@ -4718,7 +5721,7 @@ RULES:
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = filename;
-                document.body.appendChild(link);
+                _root.appendChild(link);
                 link.click();
                 link.remove();
                 URL.revokeObjectURL(url);
@@ -4766,7 +5769,7 @@ RULES:
             setupNotice() {
                 const seen = localStorage.getItem('noticeSeen_online');
                 if (!seen) {
-                    document.getElementById('noticeModal').classList.add('active');
+                    _root.getElementById('noticeModal').classList.add('active');
                 }
             }
 
@@ -4776,25 +5779,25 @@ RULES:
             }
 
             closeNotice() {
-                document.getElementById('noticeModal').classList.remove('active');
+                _root.getElementById('noticeModal').classList.remove('active');
             }
 
             // ===== TAB MANAGEMENT =====
             setupTabs() {
-                const appEl = document.getElementById('app');
+                const appEl = _root.getElementById('app');
                 appEl.classList.add('tab-agents');
 
-                document.getElementById('tabChat').addEventListener('click', () => this.switchTab('chat'));
-                document.getElementById('tabAgents').addEventListener('click', () => this.switchTab('agents'));
+                _root.getElementById('tabChat').addEventListener('click', () => this.switchTab('chat'));
+                _root.getElementById('tabAgents').addEventListener('click', () => this.switchTab('agents'));
             }
 
             switchTab(tab) {
                 this.activeTab = tab;
-                const appEl = document.getElementById('app');
+                const appEl = _root.getElementById('app');
                 appEl.classList.remove('tab-chat', 'tab-agents');
                 appEl.classList.add(`tab-${tab}`);
 
-                document.querySelectorAll('.tab-btn').forEach(btn => {
+                _root.querySelectorAll('.tab-btn').forEach(btn => {
                     btn.classList.toggle('active', btn.dataset.tab === tab);
                 });
 
@@ -4806,12 +5809,12 @@ RULES:
 
             // ===== AGENTS VIEW =====
             setupAgentsView() {
-                document.getElementById('addAgentBtn').addEventListener('click', () => {
+                _root.getElementById('addAgentBtn').addEventListener('click', () => {
                     this.showAgentPicker();
                 });
 
                 // Populate orchestrator selector
-                const orchSelect = document.getElementById('orchestratorSelector');
+                const orchSelect = _root.getElementById('orchestratorSelector');
                 MODELS.forEach(m => {
                     const opt = document.createElement('option');
                     opt.value = m.id;
@@ -4824,8 +5827,8 @@ RULES:
                 });
 
                 // Orchestrator prompt toggle and persistence
-                const orchPromptEl = document.getElementById('orchestratorPrompt');
-                const orchToggleBtn = document.getElementById('orchPromptToggle');
+                const orchPromptEl = _root.getElementById('orchestratorPrompt');
+                const orchToggleBtn = _root.getElementById('orchPromptToggle');
                 const savedOrchPrompt = localStorage.getItem('agents_orchestrator_prompt_online');
                 orchPromptEl.value = savedOrchPrompt !== null ? savedOrchPrompt : this.t('agents.orchestratorRole');
                 orchPromptEl.addEventListener('input', () => {
@@ -4836,7 +5839,7 @@ RULES:
                 });
 
                 // Shared prompts persistence
-                const ctxEl = document.getElementById('agentsContext');
+                const ctxEl = _root.getElementById('agentsContext');
                 const savedCtx = localStorage.getItem('agents_context_online');
                 if (savedCtx) ctxEl.value = savedCtx;
                 ctxEl.addEventListener('input', () => {
@@ -4844,55 +5847,70 @@ RULES:
                 });
 
                 // Toggle config
-                document.getElementById('agentsToggleConfig').addEventListener('click', () => {
+                _root.getElementById('agentsToggleConfig').addEventListener('click', () => {
                     this.agentsConfigVisible = !this.agentsConfigVisible;
-                    document.getElementById('agentsConfig').classList.toggle('collapsed', !this.agentsConfigVisible);
-                    document.getElementById('agentsToggleConfig').classList.toggle('active', this.agentsConfigVisible);
+                    _root.getElementById('agentsConfig').classList.toggle('collapsed', !this.agentsConfigVisible);
+                    _root.getElementById('agentsToggleConfig').classList.toggle('active', this.agentsConfigVisible);
                 });
 
                 // Font size
-                document.getElementById('agentsFontIncrease').addEventListener('click', () => {
+                _root.getElementById('agentsFontIncrease').addEventListener('click', () => {
                     this.chatUI.increaseFontSize();
                 });
-                document.getElementById('agentsFontDecrease').addEventListener('click', () => {
+                _root.getElementById('agentsFontDecrease').addEventListener('click', () => {
                     this.chatUI.decreaseFontSize();
                 });
 
                 // New session (saves current, starts fresh)
-                document.getElementById('agentsNewSessionBtn').addEventListener('click', () => {
+                _root.getElementById('agentsNewSessionBtn').addEventListener('click', () => {
                     this.agentsManager.newSession();
                     this.renderAgentsMessages();
                 });
 
                 // History
-                document.getElementById('agentsHistoryBtn').addEventListener('click', () => {
+                _root.getElementById('agentsHistoryBtn').addEventListener('click', () => {
                     this.showAgentsHistory();
                 });
 
                 // Export
-                document.getElementById('agentsExportBtn').addEventListener('click', () => {
+                _root.getElementById('agentsExportBtn').addEventListener('click', () => {
                     this.exportAgentsSession();
                 });
 
                 // Language toggle (mirror of main langToggle)
-                document.getElementById('agentsLangToggle').addEventListener('click', () => {
+                _root.getElementById('agentsLangToggle').addEventListener('click', () => {
                     this.toggleLanguage();
                 });
 
                 // Credit display (mirror)
-                document.getElementById('agentsCreditDisplay').addEventListener('click', () => {
+                _root.getElementById('agentsCreditDisplay').addEventListener('click', () => {
                     this.updateCreditDisplay();
                 });
 
                 // Agents navigation controls
-                document.getElementById('agentsPrevMsg').addEventListener('click', () => {
+                _root.getElementById('agentsPrevMsg').addEventListener('click', () => {
                     this.agentsPrevMessage();
                 });
-                document.getElementById('agentsNextMsg').addEventListener('click', () => {
+                _root.getElementById('agentsNextMsg').addEventListener('click', () => {
                     this.agentsNextMessage();
                 });
-                document.getElementById('agentsPageViewBtn').addEventListener('click', () => {
+                _root.getElementById('agentsPageViewBtn').addEventListener('click', () => {
                     this.showAgentsPageView();
+                });
+
+                // TTS global controls (agents)
+                _root.getElementById('agentsTtsGlobalBtn').addEventListener('click', () => {
+                    if (ttsReader.isPlaying) {
+                        ttsReader.togglePause();
+                    } else {
+                        ttsReader.startSequential('agentsMessages');
+                    }
+                    const stopBtn = _root.getElementById('agentsTtsStopBtn');
+                    stopBtn.style.display = ttsReader.isPlaying ? '' : 'none';
+                });
+                _root.getElementById('agentsTtsStopBtn').addEventListener('click', () => {
+                    ttsReader.stopAll();
+                    _root.getElementById('agentsTtsStopBtn').style.display = 'none';
                 });
 
                 this.renderAgentsCards();
@@ -4969,11 +5987,11 @@ RULES:
                 overlay.addEventListener('click', (e) => {
                     if (e.target === overlay) overlay.remove();
                 });
-                document.body.appendChild(overlay);
+                _root.appendChild(overlay);
             }
 
             renderAgentsCards() {
-                const list = document.getElementById('agentsList');
+                const list = _root.getElementById('agentsList');
                 list.innerHTML = '';
                 const agents = this.agentsManager.getAgents();
 
@@ -4983,7 +6001,7 @@ RULES:
                 }
 
                 const enabledCount = agents.filter(a => a.enabled !== false).length;
-                const existingHint = document.getElementById('leadHint');
+                const existingHint = _root.getElementById('leadHint');
                 if (existingHint) existingHint.remove();
                 if (enabledCount === 1) {
                     const hint = document.createElement('div');
@@ -5143,7 +6161,7 @@ RULES:
             }
 
             renderAgentsMessages() {
-                const container = document.getElementById('agentsMessages');
+                const container = _root.getElementById('agentsMessages');
                 const messages = this.agentsManager.getSessionMessages();
 
                 if (messages.length === 0) {
@@ -5196,6 +6214,8 @@ RULES:
 
                             item.appendChild(name);
                             item.appendChild(content);
+                            ttsReader.addMessagePlayBtn(item, content);
+                            ttsReader.decorateContent(content);
 
                             if (hasPreviewableCode(r.content)) {
                                 const previewBtn = document.createElement('button');
@@ -5233,6 +6253,8 @@ RULES:
                         contentDiv.innerHTML = renderMarkdown(entry.content);
                         div.appendChild(roleDiv);
                         div.appendChild(contentDiv);
+                        ttsReader.addMessagePlayBtn(div, contentDiv);
+                        ttsReader.decorateContent(contentDiv);
                         if (hasPreviewableCode(entry.content)) {
                             const previewBtn = document.createElement('button');
                             previewBtn.className = 'preview-btn';
@@ -5249,13 +6271,13 @@ RULES:
                 });
 
                 // Scroll to bottom
-                const scrollContainer = document.getElementById('agentsMessagesContainer');
+                const scrollContainer = _root.getElementById('agentsMessagesContainer');
                 scrollContainer.scrollTop = scrollContainer.scrollHeight;
                 this.agentsCurrentMessageIndex = -1;
             }
 
             agentsGetNavigableElements() {
-                return document.querySelectorAll('#agentsMessages > .message, #agentsMessages > .agent-responses-group');
+                return _root.querySelectorAll('#agentsMessages > .message, #agentsMessages > .agent-responses-group');
             }
 
             agentsPrevMessage() {
@@ -5291,8 +6313,8 @@ RULES:
 
             updateAgentsNavButtons() {
                 const elements = this.agentsGetNavigableElements();
-                const prevBtn = document.getElementById('agentsPrevMsg');
-                const nextBtn = document.getElementById('agentsNextMsg');
+                const prevBtn = _root.getElementById('agentsPrevMsg');
+                const nextBtn = _root.getElementById('agentsNextMsg');
                 if (prevBtn && nextBtn) {
                     prevBtn.disabled = this.agentsCurrentMessageIndex <= 0;
                     nextBtn.disabled = this.agentsCurrentMessageIndex >= elements.length - 1;
@@ -5303,7 +6325,7 @@ RULES:
                 const messages = this.agentsManager.getSessionMessages();
                 if (messages.length === 0) return;
 
-                const modal = document.getElementById('pageModal');
+                const modal = _root.getElementById('pageModal');
                 modal.classList.add('active');
                 modal.setAttribute('aria-hidden', 'false');
                 requestAnimationFrame(() => {
@@ -5314,7 +6336,7 @@ RULES:
             }
 
             buildAgentsPageViewPages(messages) {
-                const pageBody = document.getElementById('pageBody');
+                const pageBody = _root.getElementById('pageBody');
                 const measureEl = this.getPageMeasureElement();
                 const maxHeight = pageBody.clientHeight || 300;
                 const maxWidth = pageBody.clientWidth || 400;
@@ -5475,7 +6497,7 @@ RULES:
                     return;
                 }
 
-                const input = document.getElementById('messageInput');
+                const input = _root.getElementById('messageInput');
                 const content = input.value.trim();
                 if (!content) return;
 
@@ -5485,13 +6507,13 @@ RULES:
                 }
 
                 const sharedPrompts = {
-                    context: document.getElementById('agentsContext').value.trim(),
-                    orchestratorPrompt: document.getElementById('orchestratorPrompt').value.trim(),
+                    context: _root.getElementById('agentsContext').value.trim(),
+                    orchestratorPrompt: _root.getElementById('orchestratorPrompt').value.trim(),
                     datetimeAnchor: this.datetimeAnchor
                 };
 
                 input.value = '';
-                document.getElementById('sendBtn').disabled = true;
+                _root.getElementById('sendBtn').disabled = true;
 
                 const conversationContext = this.agentsManager.getSessionMessages().filter(
                     m => m.type === 'user' || m.type === 'orchestrator'
@@ -5501,8 +6523,8 @@ RULES:
                 this.renderAgentsMessages();
 
                 const { tracker, rows, header, orchRow } = this.buildProgressTracker(agents);
-                document.getElementById('agentsMessages').appendChild(tracker);
-                const scrollContainer = document.getElementById('agentsMessagesContainer');
+                _root.getElementById('agentsMessages').appendChild(tracker);
+                const scrollContainer = _root.getElementById('agentsMessagesContainer');
                 scrollContainer.scrollTop = scrollContainer.scrollHeight;
 
                 const timerInterval = setInterval(() => {
@@ -5675,7 +6697,7 @@ RULES:
                     }
                 });
 
-                document.getElementById('sendBtn').disabled = false;
+                _root.getElementById('sendBtn').disabled = false;
                 this.renderAgentsMessages();
                 this.renderAgentsCards();
             }
@@ -5724,9 +6746,9 @@ RULES:
 
             // ===== AGENTS HISTORY =====
             showAgentsHistory() {
-                const list = document.getElementById('agentsHistoryList');
+                const list = _root.getElementById('agentsHistoryList');
                 list.innerHTML = '';
-                document.getElementById('agentsHistoryModal').classList.add('active');
+                _root.getElementById('agentsHistoryModal').classList.add('active');
 
                 // Make sure current session is saved before showing history
                 this.agentsManager.saveCurrentSession();
@@ -5805,7 +6827,7 @@ RULES:
             }
 
             closeAgentsHistory() {
-                document.getElementById('agentsHistoryModal').classList.remove('active');
+                _root.getElementById('agentsHistoryModal').classList.remove('active');
             }
 
             loadAgentsSession(id) {
@@ -5839,19 +6861,19 @@ RULES:
                 // Restore orchestrator
                 if (snapshot.orchestratorModelId) {
                     this.agentsManager.setOrchestratorModelId(snapshot.orchestratorModelId);
-                    const orchSelect = document.getElementById('orchestratorSelector');
+                    const orchSelect = _root.getElementById('orchestratorSelector');
                     if (orchSelect) orchSelect.value = snapshot.orchestratorModelId;
                 }
 
                 // Restore orchestrator prompt
-                const orchPromptEl = document.getElementById('orchestratorPrompt');
+                const orchPromptEl = _root.getElementById('orchestratorPrompt');
                 if (orchPromptEl) {
                     orchPromptEl.value = snapshot.orchestratorPrompt || this.t('agents.orchestratorRole');
                     localStorage.setItem('agents_orchestrator_prompt_online', orchPromptEl.value);
                 }
 
                 // Restore context
-                const ctxEl = document.getElementById('agentsContext');
+                const ctxEl = _root.getElementById('agentsContext');
                 if (ctxEl) {
                     ctxEl.value = snapshot.context || '';
                     localStorage.setItem('agents_context_online', ctxEl.value);
@@ -5863,30 +6885,30 @@ RULES:
                 const blocks = extractCodeBlocks(messageContent);
                 const doc = buildPreviewDocument(blocks);
 
-                const modal = document.getElementById('previewModal');
+                const modal = _root.getElementById('previewModal');
                 modal.classList.add('active');
                 modal.setAttribute('aria-hidden', 'false');
 
                 // Render in iframe
-                const frame = document.getElementById('previewFrame');
+                const frame = _root.getElementById('previewFrame');
                 frame.srcdoc = doc;
 
                 // Show source
-                document.getElementById('previewSourceCode').textContent = doc;
+                _root.getElementById('previewSourceCode').textContent = doc;
 
                 // Reset to render tab
                 this.setPreviewTab('render');
 
                 // Tab listeners (re-bind each time)
-                document.getElementById('previewTabRender').onclick = () => this.setPreviewTab('render');
-                document.getElementById('previewTabSource').onclick = () => this.setPreviewTab('source');
+                _root.getElementById('previewTabRender').onclick = () => this.setPreviewTab('render');
+                _root.getElementById('previewTabSource').onclick = () => this.setPreviewTab('source');
             }
 
             setPreviewTab(tab) {
-                const renderPane = document.getElementById('previewRenderPane');
-                const sourcePane = document.getElementById('previewSourcePane');
-                const renderBtn = document.getElementById('previewTabRender');
-                const sourceBtn = document.getElementById('previewTabSource');
+                const renderPane = _root.getElementById('previewRenderPane');
+                const sourcePane = _root.getElementById('previewSourcePane');
+                const renderBtn = _root.getElementById('previewTabRender');
+                const sourceBtn = _root.getElementById('previewTabSource');
 
                 if (tab === 'render') {
                     renderPane.style.display = '';
@@ -5902,11 +6924,11 @@ RULES:
             }
 
             closePreview() {
-                const modal = document.getElementById('previewModal');
+                const modal = _root.getElementById('previewModal');
                 modal.classList.remove('active');
                 modal.setAttribute('aria-hidden', 'true');
                 // Clear iframe
-                document.getElementById('previewFrame').srcdoc = '';
+                _root.getElementById('previewFrame').srcdoc = '';
             }
 
             // ===== CREDIT MANAGEMENT =====
@@ -5940,10 +6962,10 @@ RULES:
             async updateCreditDisplay() {
                 const creditData = await this.fetchCredit();
 
-                const bottomDisplay = document.getElementById('creditDisplay');
-                const agentsDisplay = document.getElementById('agentsCreditDisplay');
-                const setupDisplay = document.getElementById('setupCreditValue');
-                const setupContainer = document.getElementById('setupCredit');
+                const bottomDisplay = _root.getElementById('creditDisplay');
+                const agentsDisplay = _root.getElementById('agentsCreditDisplay');
+                const setupDisplay = _root.getElementById('setupCreditValue');
+                const setupContainer = _root.getElementById('setupCredit');
 
                 if (!creditData) {
                     if (bottomDisplay) bottomDisplay.textContent = '$-.--';
@@ -6073,8 +7095,8 @@ RULES:
                 return {
                     agents: JSON.parse(JSON.stringify(this.agents)),
                     orchestratorModelId: this.getOrchestratorModelId(),
-                    orchestratorPrompt: document.getElementById('orchestratorPrompt')?.value || '',
-                    context: document.getElementById('agentsContext')?.value || ''
+                    orchestratorPrompt: _root.getElementById('orchestratorPrompt')?.value || '',
+                    context: _root.getElementById('agentsContext')?.value || ''
                 };
             }
 
@@ -6248,10 +7270,30 @@ RULES:
         }
 
         // ===== START APP =====
-        let app;
-        document.addEventListener('DOMContentLoaded', () => {
-            app = new App();
-        });
+
+    // ===== WEB COMPONENT =====
+    class CartiaElement extends HTMLElement {
+        constructor() {
+            super();
+            this.attachShadow({ mode: 'open' });
+        }
+
+        connectedCallback() {
+            _root = this.shadowRoot;
+            _host = this;
+
+            _root.innerHTML = `<style>${CARTIA_CSS}</style>${CARTIA_HTML}`;
+
+            // Bootstrap
+            const app = new App();
+            window.app = app;
+        }
+    }
+
+    customElements.define('cartia-app', CartiaElement);
+})();
+
     </script>
+    <cartia-app></cartia-app>
 </body>
 </html>

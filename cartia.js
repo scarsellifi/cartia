@@ -1866,6 +1866,55 @@
             background: #fee;
         }
 
+        /* TTS Controls */
+        .tts-block-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            border: 1.5px solid var(--border-color);
+            border-radius: 50%;
+            background: var(--bg-color);
+            color: var(--text-color);
+            cursor: pointer;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            flex-shrink: 0;
+            vertical-align: middle;
+            margin-left: 6px;
+        }
+
+        .tts-block-btn:hover { opacity: 0.9; }
+        .tts-block-btn.tts-active { opacity: 1; border-color: var(--message-assistant-border); }
+        .tts-block-btn.tts-loading { opacity: 0.5; cursor: wait; }
+
+        .tts-block-btn svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .tts-global-btn {
+            position: relative;
+        }
+
+        .tts-global-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .tts-global-btn.tts-playing {
+            background: var(--message-assistant-bg);
+            border-color: var(--message-assistant-border);
+        }
+
+        .tts-reading-highlight {
+            outline: 2px solid var(--message-assistant-border);
+            outline-offset: -2px;
+            border-radius: 4px;
+        }
+
         /* Code Preview */
         .preview-btn {
             display: inline-flex;
@@ -2174,6 +2223,8 @@
             <button id="reasoningToggle" class="hidden" title="Reasoning: OFF">🧠</button>
             <button id="datetimeToggle" title="Ancoraggio temporale: OFF" data-i18n-title="nav.datetimeTitle">🕐</button>
             <button id="autoScrollToggle" title="Toggle auto-scroll" data-i18n-title="nav.autoScrollTitle">👁️</button>
+            <button class="nav-btn tts-global-btn" id="ttsGlobalBtn" title="Leggi tutta la chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+            <button class="nav-btn" id="ttsStopBtn" title="Ferma lettura" style="display:none">&#x23F9;</button>
             <button id="exportBtn" title="Export chat (MD)" data-i18n-title="nav.exportTitle">⬇️</button>
             <button id="pageViewBtn" title="Modal pagine" data-i18n-title="nav.pageViewTitle">📖</button>
             <button id="tourBtn" title="Guida passo passo" data-i18n-title="guide.buttonTitle">❔</button>
@@ -2218,6 +2269,8 @@
                 </div>
                 <button class="font-btn" id="agentsFontDecrease">A-</button>
                 <button class="font-btn" id="agentsFontIncrease">A+</button>
+                <button class="nav-btn tts-global-btn" id="agentsTtsGlobalBtn" title="Leggi tutta la chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+                <button class="nav-btn" id="agentsTtsStopBtn" title="Ferma lettura" style="display:none">&#x23F9;</button>
                 <button class="nav-btn" id="agentsPageViewBtn" title="Modal pagine" data-i18n-title="nav.pageViewTitle">&#x1F4D6;</button>
                 <button class="nav-btn" id="agentsExportBtn" title="Export" data-i18n-title="nav.exportTitle">&#x2B07;&#xFE0F;</button>
                 <button class="nav-btn" id="agentsNewSessionBtn" title="Nuova sessione" data-i18n-title="agents.newSessionTitle">&#x1F4AC;</button>
@@ -3272,6 +3325,412 @@ RULES:
             }
         }
 
+        // ===== TTS READER =====
+        const _ttsPlayIcon = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="8 5 19 12 8 19 8 5"/></svg>';
+        const _ttsPauseIcon = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="5" width="3" height="14" rx="1"/><rect x="14" y="5" width="3" height="14" rx="1"/></svg>';
+        const _ttsStopIcon = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+        const _ttsSpeakerIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+
+        class TTSReader {
+            constructor() {
+                this._engine = null;
+                this._playing = false;
+                this._blockIndex = -1;
+                this._blocks = [];
+                this._jumpRequested = false;
+                this._paused = false;
+                this._pauseResolve = null;
+                this._callToken = 0;
+                this._aborted = false;
+                this._scope = null; // 'message' | 'global'
+            }
+
+            _ensureEngine() {
+                if (this._engine) return this._engine;
+                this._engine = document.createElement('cartia-tts');
+                this._engine.style.display = 'none';
+                (_root.host || document.body).appendChild(this._engine);
+                return this._engine;
+            }
+
+            // --- Collect readable blocks ---
+
+            _collectBlocks(container) {
+                const blocks = [];
+                const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, {
+                    acceptNode: (node) => {
+                        if (node.matches('p, h1, h2, h3, h4, h5, h6, li, blockquote')) {
+                            if (node.closest('.message-content') || node.closest('.agent-response-content')) {
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                        }
+                        if (node.classList && node.classList.contains('message-content')) {
+                            const parent = node.closest('.message');
+                            if (parent && parent.classList.contains('user')) {
+                                const sub = node.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote');
+                                if (sub.length === 0 && node.textContent.trim()) {
+                                    return NodeFilter.FILTER_ACCEPT;
+                                }
+                            }
+                        }
+                        return NodeFilter.FILTER_SKIP;
+                    }
+                });
+                let n;
+                while (n = walker.nextNode()) blocks.push(n);
+                return blocks;
+            }
+
+            _getBlockText(block) {
+                const clone = block.cloneNode(true);
+                clone.querySelectorAll('.tts-block-btn').forEach(b => b.remove());
+                return clone.textContent.trim();
+            }
+
+            // --- Decorate message content with inline play buttons ---
+
+            decorateContent(contentDiv) {
+                const blocks = contentDiv.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote');
+                blocks.forEach((block) => {
+                    if (block.querySelector('.tts-block-btn')) return;
+                    const btn = document.createElement('button');
+                    btn.className = 'tts-block-btn';
+                    btn.innerHTML = _ttsPlayIcon;
+                    btn.title = 'Ascolta da qui';
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this._onBlockClick(block, contentDiv);
+                    });
+                    block.appendChild(btn);
+                });
+            }
+
+            // --- Add per-message play button ---
+
+            addMessagePlayBtn(messageDiv, contentDiv) {
+                const roleDiv = messageDiv.querySelector('.message-role') || messageDiv.querySelector('.agent-response-name');
+                if (!roleDiv || roleDiv.querySelector('.tts-msg-btn')) return;
+
+                const btn = document.createElement('button');
+                btn.className = 'tts-block-btn tts-msg-btn';
+                btn.innerHTML = _ttsSpeakerIcon;
+                btn.title = 'Ascolta messaggio';
+                btn.style.marginLeft = '8px';
+                btn.style.verticalAlign = 'middle';
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._startMessageRead(messageDiv, contentDiv, 0);
+                });
+                roleDiv.appendChild(btn);
+            }
+
+            // --- Click on inline paragraph button: read from here to end of message ---
+
+            _onBlockClick(block, contentDiv) {
+                // If already playing this block, toggle pause
+                if (this._playing && this._blocks[this._blockIndex] === block) {
+                    this.togglePause();
+                    return;
+                }
+
+                // Find the message div that contains this content
+                const messageDiv = contentDiv.closest('.message') || contentDiv.closest('.agent-response-item');
+
+                // Collect blocks within this message
+                const container = messageDiv || contentDiv;
+                const blocks = this._collectBlocks(container);
+                const startIdx = blocks.indexOf(block);
+
+                if (startIdx < 0 || blocks.length === 0) return;
+
+                this._startRead(blocks, startIdx, 'message');
+            }
+
+            // --- Start reading entire message from index ---
+
+            _startMessageRead(messageDiv, contentDiv, startIdx) {
+                if (this._playing) {
+                    // If already reading this message, toggle pause
+                    if (this._scope === 'message') {
+                        this.togglePause();
+                        return;
+                    }
+                    this.stopAll();
+                }
+
+                const blocks = this._collectBlocks(messageDiv);
+                if (blocks.length === 0) {
+                    // Fallback: read plain text
+                    const text = this._getBlockText(contentDiv);
+                    if (text) {
+                        this._ensureEngine().speak(text);
+                    }
+                    return;
+                }
+
+                this._startRead(blocks, startIdx, 'message');
+            }
+
+            // --- Start reading entire chat ---
+
+            startSequential(containerId) {
+                this.stopAll();
+                const container = _root.getElementById(containerId);
+                if (!container) return;
+
+                const blocks = this._collectBlocks(container);
+                if (blocks.length === 0) return;
+
+                this._startRead(blocks, 0, 'global');
+            }
+
+            // --- Core sequential read engine ---
+
+            _startRead(blocks, startIdx, scope) {
+                this.stopAll();
+                this._blocks = blocks;
+                this._blockIndex = startIdx;
+                this._scope = scope;
+                this._aborted = false;
+                this._playing = true;
+                this._paused = false;
+
+                if (scope === 'global') {
+                    this._updateGlobalBtn(true);
+                }
+                this._updateMsgBtn(true);
+                this._runSequential();
+            }
+
+            async _runSequential() {
+                const engine = this._ensureEngine();
+                const token = ++this._callToken;
+
+                while (this._blockIndex < this._blocks.length && !this._aborted) {
+                    if (token !== this._callToken) return;
+
+                    // Pause gate
+                    if (this._paused) {
+                        await new Promise(resolve => { this._pauseResolve = resolve; });
+                        if (this._aborted || token !== this._callToken) return;
+                    }
+
+                    if (this._jumpRequested) {
+                        this._jumpRequested = false;
+                        continue;
+                    }
+
+                    const block = this._blocks[this._blockIndex];
+                    const text = this._getBlockText(block);
+
+                    if (!text) {
+                        this._blockIndex++;
+                        continue;
+                    }
+
+                    // Highlight & scroll
+                    this._clearHighlight();
+                    block.classList.add('tts-reading-highlight');
+                    this._currentHighlight = block;
+                    block.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    // Update inline btn if present
+                    const inlineBtn = block.querySelector('.tts-block-btn');
+                    if (inlineBtn) {
+                        inlineBtn.classList.add('tts-active');
+                        inlineBtn.innerHTML = _ttsPauseIcon;
+                    }
+
+                    // Speak and wait
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const onEnd = () => {
+                                engine.removeEventListener('tts-end', onEnd);
+                                engine.removeEventListener('tts-error', onErr);
+                                resolve();
+                            };
+                            const onErr = () => {
+                                engine.removeEventListener('tts-end', onEnd);
+                                engine.removeEventListener('tts-error', onErr);
+                                reject(new Error('tts-error'));
+                            };
+                            engine.addEventListener('tts-end', onEnd);
+                            engine.addEventListener('tts-error', onErr);
+                            engine.speak(text);
+                        });
+                    } catch {
+                        // On error, skip block
+                    }
+
+                    // Reset inline btn
+                    if (inlineBtn) {
+                        inlineBtn.classList.remove('tts-active');
+                        inlineBtn.innerHTML = _ttsPlayIcon;
+                    }
+
+                    if (!this._jumpRequested) {
+                        this._blockIndex++;
+                    }
+                }
+
+                // Done
+                this._finishRead();
+            }
+
+            _finishRead() {
+                this._clearHighlight();
+                this._resetAllBlockBtns();
+                this._playing = false;
+                this._paused = false;
+                this._scope = null;
+                this._updateGlobalBtn(false);
+                this._updateMsgBtn(false);
+            }
+
+            togglePause() {
+                if (!this._playing) return;
+                if (this._paused) {
+                    this._paused = false;
+                    if (this._pauseResolve) {
+                        this._pauseResolve();
+                        this._pauseResolve = null;
+                    }
+                } else {
+                    this._paused = true;
+                    this._ensureEngine().stop();
+                }
+                this._updateGlobalBtn(true);
+                this._updateMsgBtn(true);
+            }
+
+            skipNext() {
+                if (!this._playing) return;
+                if (this._blockIndex < this._blocks.length - 1) {
+                    this._blockIndex++;
+                    this._jumpRequested = true;
+                    this._ensureEngine().stop();
+                    if (this._paused) {
+                        this._paused = false;
+                        if (this._pauseResolve) { this._pauseResolve(); this._pauseResolve = null; }
+                    }
+                }
+            }
+
+            skipPrev() {
+                if (!this._playing) return;
+                if (this._blockIndex > 0) {
+                    this._blockIndex--;
+                    this._jumpRequested = true;
+                    this._ensureEngine().stop();
+                    if (this._paused) {
+                        this._paused = false;
+                        if (this._pauseResolve) { this._pauseResolve(); this._pauseResolve = null; }
+                    }
+                }
+            }
+
+            stopAll() {
+                this._aborted = true;
+                this._callToken++;
+                if (this._engine) this._engine.stop();
+                if (this._pauseResolve) { this._pauseResolve(); this._pauseResolve = null; }
+                this._playing = false;
+                this._paused = false;
+                this._scope = null;
+                this._clearHighlight();
+                this._resetAllBlockBtns();
+                this._updateGlobalBtn(false);
+                this._updateMsgBtn(false);
+            }
+
+            get isPlaying() { return this._playing; }
+            get isPaused() { return this._paused; }
+
+            // --- UI helpers ---
+
+            _clearHighlight() {
+                if (this._currentHighlight) {
+                    this._currentHighlight.classList.remove('tts-reading-highlight');
+                    this._currentHighlight = null;
+                }
+                _root.querySelectorAll('.tts-reading-highlight').forEach(el => {
+                    el.classList.remove('tts-reading-highlight');
+                });
+            }
+
+            _resetAllBlockBtns() {
+                _root.querySelectorAll('.tts-block-btn.tts-active').forEach(btn => {
+                    btn.classList.remove('tts-active');
+                    btn.innerHTML = _ttsPlayIcon;
+                });
+            }
+
+            _updateMsgBtn(playing) {
+                // Update all message-level buttons
+                _root.querySelectorAll('.tts-msg-btn').forEach(btn => {
+                    if (playing && !this._paused) {
+                        // Find if this btn's message contains the current block
+                        const msgDiv = btn.closest('.message') || btn.closest('.agent-response-item');
+                        if (msgDiv && this._blocks[this._blockIndex] && msgDiv.contains(this._blocks[this._blockIndex])) {
+                            btn.classList.add('tts-active');
+                            btn.innerHTML = _ttsPauseIcon;
+                        } else {
+                            btn.classList.remove('tts-active');
+                            btn.innerHTML = _ttsSpeakerIcon;
+                        }
+                    } else if (playing && this._paused) {
+                        const msgDiv = btn.closest('.message') || btn.closest('.agent-response-item');
+                        if (msgDiv && this._blocks[this._blockIndex] && msgDiv.contains(this._blocks[this._blockIndex])) {
+                            btn.classList.add('tts-active');
+                            btn.innerHTML = _ttsPlayIcon;
+                        } else {
+                            btn.classList.remove('tts-active');
+                            btn.innerHTML = _ttsSpeakerIcon;
+                        }
+                    } else {
+                        btn.classList.remove('tts-active');
+                        btn.innerHTML = _ttsSpeakerIcon;
+                    }
+                });
+            }
+
+            _updateGlobalBtn(playing) {
+                const pairs = [
+                    ['ttsGlobalBtn', 'ttsStopBtn'],
+                    ['agentsTtsGlobalBtn', 'agentsTtsStopBtn']
+                ];
+                pairs.forEach(([id, stopId]) => {
+                    const btn = _root.getElementById(id);
+                    const stopBtn = _root.getElementById(stopId);
+                    if (!btn) return;
+                    if (playing && !this._paused) {
+                        btn.classList.add('tts-playing');
+                        btn.innerHTML = _ttsPauseIcon;
+                        btn.title = 'Pausa lettura';
+                        if (stopBtn) stopBtn.style.display = '';
+                    } else if (playing && this._paused) {
+                        btn.classList.add('tts-playing');
+                        btn.innerHTML = _ttsPlayIcon;
+                        btn.title = 'Riprendi lettura';
+                        if (stopBtn) stopBtn.style.display = '';
+                    } else {
+                        btn.classList.remove('tts-playing');
+                        btn.innerHTML = _ttsSpeakerIcon;
+                        btn.title = 'Leggi tutta la chat';
+                        if (stopBtn) stopBtn.style.display = 'none';
+                    }
+                });
+            }
+        }
+
+        const ttsReader = new TTSReader();
+
+        // Stop TTS on page hide/unload
+        window.addEventListener('beforeunload', () => ttsReader.stopAll());
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) ttsReader.stopAll();
+        });
+
         // ===== CHAT UI CLASS =====
         class ChatUI {
             constructor(translator) {
@@ -3311,6 +3770,12 @@ RULES:
 
                 div.appendChild(roleDiv);
                 div.appendChild(contentDiv);
+
+                // TTS: per-message play button + inline paragraph buttons
+                if (message.role === 'assistant' && message.content) {
+                    ttsReader.addMessagePlayBtn(div, contentDiv);
+                    ttsReader.decorateContent(contentDiv);
+                }
 
                 // Preview button for code blocks
                 if (message.role === 'assistant' && hasPreviewableCode(message.content)) {
@@ -3891,6 +4356,21 @@ RULES:
 
                 _root.getElementById('pageFontDecrease').addEventListener('click', () => {
                     this.decreasePageFontSize();
+                });
+
+                // TTS global controls (chat)
+                _root.getElementById('ttsGlobalBtn').addEventListener('click', () => {
+                    if (ttsReader.isPlaying) {
+                        ttsReader.togglePause();
+                    } else {
+                        ttsReader.startSequential('messages');
+                    }
+                    const stopBtn = _root.getElementById('ttsStopBtn');
+                    stopBtn.style.display = ttsReader.isPlaying ? '' : 'none';
+                });
+                _root.getElementById('ttsStopBtn').addEventListener('click', () => {
+                    ttsReader.stopAll();
+                    _root.getElementById('ttsStopBtn').style.display = 'none';
                 });
 
                 // Datetime anchor toggle
@@ -4888,6 +5368,21 @@ RULES:
                     this.showAgentsPageView();
                 });
 
+                // TTS global controls (agents)
+                _root.getElementById('agentsTtsGlobalBtn').addEventListener('click', () => {
+                    if (ttsReader.isPlaying) {
+                        ttsReader.togglePause();
+                    } else {
+                        ttsReader.startSequential('agentsMessages');
+                    }
+                    const stopBtn = _root.getElementById('agentsTtsStopBtn');
+                    stopBtn.style.display = ttsReader.isPlaying ? '' : 'none';
+                });
+                _root.getElementById('agentsTtsStopBtn').addEventListener('click', () => {
+                    ttsReader.stopAll();
+                    _root.getElementById('agentsTtsStopBtn').style.display = 'none';
+                });
+
                 this.renderAgentsCards();
                 this.renderAgentsMessages();
             }
@@ -5189,6 +5684,8 @@ RULES:
 
                             item.appendChild(name);
                             item.appendChild(content);
+                            ttsReader.addMessagePlayBtn(item, content);
+                            ttsReader.decorateContent(content);
 
                             if (hasPreviewableCode(r.content)) {
                                 const previewBtn = document.createElement('button');
@@ -5226,6 +5723,8 @@ RULES:
                         contentDiv.innerHTML = renderMarkdown(entry.content);
                         div.appendChild(roleDiv);
                         div.appendChild(contentDiv);
+                        ttsReader.addMessagePlayBtn(div, contentDiv);
+                        ttsReader.decorateContent(contentDiv);
                         if (hasPreviewableCode(entry.content)) {
                             const previewBtn = document.createElement('button');
                             previewBtn.className = 'preview-btn';
@@ -6257,6 +6756,7 @@ RULES:
 
             // Bootstrap
             const app = new App();
+            window.app = app;
         }
     }
 
