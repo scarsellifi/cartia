@@ -36,7 +36,6 @@
             background: var(--bg-color);
             color: var(--text-color);
             height: 100vh;
-            height: 100dvh;
             display: flex;
             flex-direction: column;
         }
@@ -282,7 +281,6 @@
         #app {
             display: none;
             height: 100vh;
-            height: 100dvh;
             flex-direction: column;
         }
 
@@ -414,7 +412,6 @@
         #messagesContainer {
             flex: 1;
             overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
             padding: 20px;
         }
 
@@ -1088,6 +1085,19 @@
         @media (max-width: 720px) {
             :host {
                 --bottom-bar-offset: 78px;
+                height: auto;
+                min-height: 100vh;
+            }
+
+            #app {
+                height: auto;
+                min-height: 100vh;
+            }
+
+            #messagesContainer {
+                flex: none;
+                overflow: visible;
+                min-height: 200px;
             }
 
             #topBar {
@@ -1511,7 +1521,6 @@
         .agents-messages-container {
             flex: 1;
             overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
             padding: 20px;
         }
 
@@ -1803,6 +1812,141 @@
         @media (max-width: 500px) {
             .agents-shared-prompts {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        /* ===== MOBILE: Agents view ===== */
+        @media (max-width: 720px) {
+            /* LAYOUT CHIAVE: su mobile tutto scrolla come una pagina unica */
+            #app.tab-agents {
+                height: auto;
+                min-height: 100vh;
+            }
+            #app.tab-agents #agentsView {
+                overflow: visible;
+                flex: none;
+            }
+
+            /* Config: non più fissa, scorre col contenuto */
+            .agents-config {
+                padding: 8px 10px;
+            }
+            .agents-config-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+            }
+            .agents-config-header h3 {
+                font-size: 13px;
+            }
+            .agents-config-actions {
+                justify-content: space-between;
+            }
+
+            /* Nascondi orchestrator su mobile (gestito internamente) */
+            .agents-orchestrator {
+                display: none;
+            }
+
+            /* Bottone aggiungi: full width */
+            .add-agent-btn {
+                flex: 1;
+                text-align: center;
+                padding: 10px 14px;
+                font-size: 14px;
+            }
+
+            /* Banner help: compatto */
+            #agentsHelpBanner {
+                padding: 8px 10px;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            /* Agent cards: verticali, full width */
+            .agents-list {
+                flex-direction: column;
+                overflow-x: visible;
+                gap: 8px;
+                padding: 4px 0;
+            }
+            .agent-card {
+                min-width: unset;
+                max-width: unset;
+                width: 100%;
+            }
+
+            /* Agent card header: compatto */
+            .agent-card-header {
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            .agent-card-header-left {
+                gap: 4px;
+            }
+
+            /* Messaggi: scorrono nella pagina, non in un contenitore interno */
+            .agents-messages-container {
+                flex: none;
+                overflow: visible;
+                padding: 10px;
+                padding-bottom: 60px;
+                min-height: 200px;
+            }
+
+            /* Input: font 16px previene zoom iOS */
+            #messageInput {
+                font-size: 16px !important;
+            }
+
+            /* Bottom bar: sticky in basso */
+            .agents-bottom-bar {
+                position: sticky;
+                bottom: 0;
+                z-index: 10;
+                padding: 8px 10px;
+                gap: 4px;
+            }
+            .agents-bottom-bar .font-btn,
+            .agents-bottom-bar .nav-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 12px;
+            }
+
+            /* Top bar: sticky in alto */
+            #topBar {
+                position: sticky;
+                top: 0;
+                z-index: 10;
+            }
+
+            /* Picker: quasi full screen */
+            .agent-picker {
+                width: 96vw;
+                max-height: 90vh;
+                border-radius: 8px;
+            }
+            .agent-picker-item {
+                padding: 12px;
+            }
+            .agent-picker-item .picker-name {
+                font-size: 15px;
+            }
+            .agent-picker-item .picker-desc {
+                font-size: 13px;
+            }
+
+            /* Shared prompts: compatto */
+            .agents-shared-prompts textarea {
+                min-height: 40px;
+                font-size: 16px;
+            }
+
+            /* Progress panel: compatto */
+            .agent-progress-row {
+                font-size: 12px;
+                padding: 4px 8px;
             }
         }
 
